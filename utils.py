@@ -7,7 +7,7 @@ import seaborn as sn
 import pandas as pd
 from AutoPGD.auto_pgd import apgd
 from tqdm import tqdm
-
+import matplotlib.colors as colors
 
 def train(train_loader, model, device, criterion, optimizer, adversarial=False, attack=None, **kwargs):
     """
@@ -361,8 +361,23 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, save_path
                "OV", "PAAD", "PCPG", "PRAD", "READ",
                "SARC", "SKCM", "STAD", "TGCT", "THCA",
                "THYM", "UCEC", "UCS", "UVM"]
-    else:
+    elif train_conf_mat.shape[0]==63:
         classes = ["ACC", "BLCA", "BRCA", "CESC",
+                "CHOL", "COAD", "DLBC", "ESCA", "GBM",
+                "HNSC", "KICH", "KIRC", "KIRP", "LAML",
+                "LGG", "LIHC", "LUAD", "LUSC", "MESO",
+                "OV", "PAAD", "PCPG", "PRAD", "READ",
+                "SARC", "SKCM", "STAD", "TGCT", "THCA",
+                "THYM", "UCEC", "UCS", "UVM",'Adipose Tissue', 
+                'Adrenal Gland', 'Bladder', 'Blood', 'Blood Vessel', 
+                'Brain', 'Breast', 'Cervix Uteri', 'Colon', 
+                'Esophagus', 'Fallopian Tube', 'Heart', 'Kidney', 
+                'Liver', 'Lung', 'Muscle', 'Nerve', 'Ovary', 
+                'Pancreas', 'Pituitary', 'Prostate', 'Salivary Gland', 
+                'Skin', 'Small Intestine', 'Spleen', 'Stomach', 
+                'Testis', 'Thyroid', 'Uterus', 'Vagina']
+    elif train_conf_mat.shape[0]==64:
+        classes = ["TCGA NT","ACC", "BLCA", "BRCA", "CESC",
                 "CHOL", "COAD", "DLBC", "ESCA", "GBM",
                 "HNSC", "KICH", "KIRC", "KIRP", "LAML",
                 "LGG", "LIHC", "LUAD", "LUSC", "MESO",
@@ -384,14 +399,16 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, save_path
 
     # Plot params
     scale = 1.5
-    fig_size = (50, 25)
+    fig_size = (50, 30)
     tit_size = 40
     lab_size = 30
+    cm_str = 'Purples'
 
     # Plot confusion matrix for train
     plt.figure(figsize=fig_size)
     sn.set(font_scale=scale)
-    ax = sn.heatmap(df_train, annot=True, linewidths=.5, fmt='g')
+    ax = sn.heatmap(df_train, annot=True, linewidths=.5, fmt='g', cmap=plt.get_cmap(cm_str),
+                    linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
     plt.title("Train \nConfusion matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
@@ -400,13 +417,15 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, save_path
     plt.ylabel("Groundtruth", fontsize=tit_size)
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(labelsize=lab_size)
+    plt.tight_layout()
     plt.savefig(save_path+"_train.png", dpi=200)
     plt.close()
 
     # Plot confusion matrix for test
     plt.figure(figsize=fig_size)
     sn.set(font_scale=scale)
-    ax = sn.heatmap(df_test, annot=True, linewidths=.5, fmt='g')
+    ax = sn.heatmap(df_test, annot=True, linewidths=.5, fmt='g', cmap=plt.get_cmap(cm_str),
+                    linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
     plt.title("Test \nConfusion matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
@@ -415,13 +434,15 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, save_path
     plt.ylabel("Groundtruth", fontsize=tit_size)
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(labelsize=lab_size)
+    plt.tight_layout()
     plt.savefig(save_path + "_test.png", dpi=200)
     plt.close()
 
     # Plot confusion matrix for adversarial test
     plt.figure(figsize=fig_size)
     sn.set(font_scale=scale)
-    ax = sn.heatmap(df_adv_test, annot=True, linewidths=.5, fmt='g')
+    ax = sn.heatmap(df_adv_test, annot=True, linewidths=.5, fmt='g', cmap=plt.get_cmap(cm_str),
+                    linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
     plt.title("Adversarial test \nConfusion matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
@@ -430,6 +451,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, save_path
     plt.ylabel("Groundtruth", fontsize=tit_size)
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(labelsize=lab_size)
+    plt.tight_layout()
     plt.savefig(save_path + "_adv_test.png", dpi=200)
     plt.close()
 

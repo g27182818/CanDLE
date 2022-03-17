@@ -53,7 +53,7 @@ p_value_thr = 0.05                  # P-value Spearman correlation threshold for
 hidd = 8                            # Hidden channels parameter for baseline model                                     #
 model_type = "MLP_ALL"              # Model type, can be "MLP_FIL", "MLP_ALL", "BASELINE"                              #
 # Training parameters -------------------------------------------------------------------------------------------------#
-experiment_name = "MISC_TEST"       # Experiment name to define path were results are stored                           #
+experiment_name = "TEST_TCGA_VS_GTEX"# Experiment name to define path were results are stored                           #
 lr = 0.00001                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
 total_epochs = 20                   # Total number of epochs to train                                                  #
 metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
@@ -86,17 +86,19 @@ elif model_type == "MLP_ALL":
     ########################################################################################
     # TEMPORAL CODE MADE TO INTEGRATE GTEX DATA ############################################
     ########################################################################################
-    compute = True
+    compute = False
     gtex = True
     filter_intersection = True
+    tcga_nt = True
 
     if compute ==True:
+        print('Computing final dataset. Will be stored in: '+os.path.join('final_dataset', 'X.feather'))
         print('Started reading TCGA data...')
         # Obtain data matrices (in numpy) from dataloader funciton. X and Y are already shuffled
         X_tcga, Y_tcga, ID, loc2gene = matrixloader(mean_thr, std_thr)
         
         # Remove normal from TCGA if gtex is used
-        if gtex == True:
+        if not tcga_nt:
             print('Removing Normal TCGA data for GTEx integration...')
             # Remove normal TCGA dada
             remove_normal_index_tcga = Y_tcga != 0
@@ -152,6 +154,9 @@ elif model_type == "MLP_ALL":
             print('Transforming GTEx data...')
             X_gtex = np.log2(X_gtex+1)
 
+            if tcga_nt == True:
+                Y_gtex += 1
+
             # Create unified X_np matrix
             print('Merging TCGA and GTEx data...')
             X_np = np.vstack((X_tcga, X_gtex))
@@ -168,29 +173,24 @@ elif model_type == "MLP_ALL":
         X_np = X_np[shuffler]
         Y_np = Y_np[shuffler]
 
-        # # Create save directories
-        # try:
-        #     os.makedirs(os.path.join('final_dataset'))
-        # except:
-        #     print(os.path.join('final_dataset')+" directory already exist")
+        # Create save directories
+        try:
+            os.makedirs(os.path.join('final_dataset'))
+        except:
+            print(os.path.join('final_dataset')+" directory already exist")
         
-        # # Save X_np, Y_np and intersection_list
-        # print('Saving total X to file...')
-        # with open(os.path.join('final_dataset', 'X.pkl'), 'wb') as f:
-        #     pickle.dump(X_np, f)
-        # print('Saving total Y to file...')
-        # with open(os.path.join('final_dataset', 'Y.pkl'), 'wb') as f:
-        #     pickle.dump(Y_np, f)
-        # print('Saving intersection genes to file...')
-        # with open(os.path.join('final_dataset', 'intersection_genes.pkl'), 'wb') as f:
-        #     pickle.dump(intersection_list, f)
+        print('Saving complete dataset with feather...')
+        pd.DataFrame(X_np, columns=intersection_list).to_feather(os.path.join('final_dataset', 'X.feather'))
+        pd.DataFrame(Y_np, columns=['annotations']).to_feather(os.path.join('final_dataset', 'Y.feather'))
+        print('Saving intersection genes to file...')
+        with open(os.path.join('final_dataset', 'intersection_genes.pkl'), 'wb') as f:
+            pickle.dump(intersection_list, f)
     else:
+        print('Loading final dataset from: '+os.path.join('final_dataset', 'X.feather'))
         # Load important variables from files
-        X_np = pd.read_pickle(os.path.join('final_dataset', 'X.pkl'))
-        Y_np = pd.read_pickle(os.path.join('final_dataset', 'Y.pkl'))
+        X_np = pd.read_feather(os.path.join('final_dataset', 'X.feather')).values
+        Y_np = pd.read_feather(os.path.join('final_dataset', 'Y.feather')).values
         intersection_list = pd.read_pickle(os.path.join('final_dataset', 'intersection_genes.pkl'))
-
-    # breakpoint()
 
     #########################################################################################
     #########################################################################################
