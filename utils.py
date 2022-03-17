@@ -482,3 +482,47 @@ def demo(loader, model, device, num_test):
             save_path = "demo_" + str(num_test) + ".png"
             plt.savefig(save_path, dpi=200)
             break
+
+
+def fpkm2tpm(x, log2 = True, pre_log2 = True):
+    """This function takes an input matrix with rows being patients and columns being genes and returns
+    a transformed matrix with the same shape but with expression values transformed to TPM normalization.
+    The normalized expression vaues in the input matrix are in FPKM nomralization. 
+
+    Args:
+        x (np.array): Input matrix in FPKM normalization. Rows are samples and columns are genes.
+        log2 (bool, optional): Whether to perform a log2 transform after transforming to TPM. Defaults to True.
+        pre_log2 (bool, optional): True if input martix is log2 transformed. Defaults to True.
+
+    Returns:
+        x_t (np.array): Transformed version of input matrix x.
+    """
+
+    if pre_log2:
+        # Reverse log2 transform
+        x = np.exp2(x)-1
+    
+    # Put x in TPM normalization
+    x_t = 1e6 * x/np.sum(x, axis=0, keepdims=True)
+
+    if log2:
+        # Perform log2 normalization on x
+        x_t = np.log2(x_t+1)
+
+    return x_t
+
+
+def read_csv_pgbar(csv_path, chunksize, usecols, dtype=object):
+    # print('Getting row count of csv file')
+    rows = sum(1 for _ in open(csv_path, 'r')) - 1 # minus the header
+    # chunks = rows//chunksize + 1
+    # print('Reading csv file')
+    chunk_list = []
+ 
+    with tqdm(total=rows, desc='Rows read: ') as bar:
+        for chunk in pd.read_csv(csv_path, chunksize=chunksize, usecols=usecols, dtype=dtype):
+            chunk_list.append(chunk)
+            bar.update(len(chunk))
+ 
+    df = pd.concat((f for f in chunk_list), axis=0)
+    print('Finish reading csv file')

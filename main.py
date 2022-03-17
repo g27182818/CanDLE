@@ -20,7 +20,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# Test cambios
 ################ Temporal parser code #######################
 ################ Must be replace by configs #################
 # Import the library
@@ -54,7 +53,7 @@ p_value_thr = 0.05                  # P-value Spearman correlation threshold for
 hidd = 8                            # Hidden channels parameter for baseline model                                     #
 model_type = "MLP_ALL"              # Model type, can be "MLP_FIL", "MLP_ALL", "BASELINE"                              #
 # Training parameters -------------------------------------------------------------------------------------------------#
-experiment_name = "lr0.00001_TCGA_no_filter"  # Experiment name to define path were results are stored                           #
+experiment_name = "MISC_TEST"       # Experiment name to define path were results are stored                           #
 lr = 0.00001                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
 total_epochs = 20                   # Total number of epochs to train                                                  #
 metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
@@ -88,8 +87,8 @@ elif model_type == "MLP_ALL":
     # TEMPORAL CODE MADE TO INTEGRATE GTEX DATA ############################################
     ########################################################################################
     compute = True
-    gtex = False
-    filter_intersection = False
+    gtex = True
+    filter_intersection = True
 
     if compute ==True:
         print('Started reading TCGA data...')
@@ -98,7 +97,7 @@ elif model_type == "MLP_ALL":
         
         # Remove normal from TCGA if gtex is used
         if gtex == True:
-            print('Modifing TCGA data...')
+            print('Removing Normal TCGA data for GTEx integration...')
             # Remove normal TCGA dada
             remove_normal_index_tcga = Y_tcga != 0
             Y_tcga = Y_tcga[remove_normal_index_tcga]
@@ -126,19 +125,22 @@ elif model_type == "MLP_ALL":
             X_tcga = X_tcga[:, np.ravel(locations.to_numpy())]
 
         print('Performing transformations on TCGA data...')
-        # Reverse log2 transform
-        X_tcga = np.exp2(X_tcga)-1
-        # Put X_tcga in TPM normalization
-        X_tcga = 1e6 * X_tcga/np.sum(X_tcga, axis=0, keepdims=True)
-        # Perform log2 normalization on X_tcga
-        X_tcga = np.log2(X_tcga+1)
+        X_tcga = fpkm2tpm(X_tcga, log2 = True, pre_log2 = True)
 
         if gtex == True:
-            print('Started reading GTEx data...')
+            # Load tissue2annotation dict
+            with open(os.path.join('processed_gtex', 'gtex_tissue2annot.pkl'), 'rb') as f:
+                tissue2annot = pickle.load(f)
+            # Read complete dataset with feather
+            print('Started reading GTEx data with feather...')
+            start = time.time()
+            feather_gtex = pd.read_feather(os.path.join('processed_gtex', 'complete_dataframe.feather'), use_threads=True)
+            final = time.time()
+            print('Read GTEx feather process took: '+str(round(final-start, 3)) + ' s')
+            # Read ordered genes
             ordered_genes_gtex = pd.read_pickle(os.path.join('processed_gtex', 'ordered_genes.pkl'))
-            # Read X_gtex and Y_gtex data
-            X_gtex = np.load(os.path.join('processed_gtex', 'gtex_x.npy'), allow_pickle=True).astype(np.float64)
-            Y_gtex = np.load(os.path.join('processed_gtex', 'gtex_y.npy'), allow_pickle=True)
+            Y_gtex = feather_gtex['tissue'].map(tissue2annot).values
+            X_gtex = feather_gtex.loc[:, ~feather_gtex.columns.isin(['tissue', 'index'])].values
 
             print('Filtering GTEx data...')
             # Filter X_gtex with intersection list the same was that was done with X_tcga
