@@ -286,9 +286,3 @@ def generate_graph_adjacency(X, corr_thr, p_thr=0.05):
 # from dataloader import dataloader, generate_graph_adjacency
 # X, Y, ID, loc2gene = dataloader(0.5, 0.8)
 # edge_indices, edge_attributes = generate_graph_adjacency(X, 0.6, 0.05)
-
-
-
-
-
-
