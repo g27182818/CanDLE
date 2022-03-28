@@ -37,5 +37,5 @@ Notes:
 
 Having this you can now quit the R session `quit()` and should be able to run the `tcga_downloader.R` script:
 ```
-R tcga_downloader.R
+Rscript tcga_downloader.R
 ```
