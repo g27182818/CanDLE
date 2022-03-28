@@ -31,6 +31,9 @@ BiocManager::install("TCGAbiolinks")
 
 install.packages('feather')
 ```
+Notes:
+* There is no need to update the `pbdZMQ` when asked by R.
+* If the `XML` package gives problems quiting R (`quit()`) and installing this package using `conda install -c conda-forge r-xml` can work. 
 
 Having this you can now quit the R session `quit()` and should be able to run the `tcga_downloader.R` script:
 ```
