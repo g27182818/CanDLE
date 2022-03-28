@@ -19,7 +19,7 @@ for (project_name in list_tcga){
                     workflow.type = "HTSeq - Counts")
   
   # Download data using api
-  GDCdownload(query, method = "api")
+  GDCdownload(query, method = "api", files.per.chunk = 200)
   
   # Read downloaded data and get a single matrix for the complete project
   data <- GDCprepare(query,
