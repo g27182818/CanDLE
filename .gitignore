@@ -1,3 +1,6 @@
 Results/
 __pycache__/
 final_dataset/
+GDCdata/
+data/
+MANIFEST.txt
