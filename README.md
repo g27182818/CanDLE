@@ -18,7 +18,9 @@ conda install -c conda-forge r-base=4.1.0
 ```
 Now you have a fully working R envirment. Now we need to install two packages inside R:
 * ***TCGAbiolinks*** ([Bioconductor](https://bioconductor.org/packages/release/bioc/html/TCGAbiolinks.html)): To easily handle the download API of the [GDC project](https://portal.gdc.cancer.gov/).
-* ***feather*** ([Docs](https://cran.r-project.org/web/packages/feather/feather.pdf)): To store data in an efficient and fast format that can be read using pandas. 
+* ***EDASeq*** ([Bioconductor](https://bioconductor.org/packages/release/bioc/html/EDASeq.html)) To get gene lengths from the ENSEMBLE database.
+* ***feather*** ([Docs](https://cran.r-project.org/web/packages/feather/feather.pdf)): To store data in an efficient and fast format that can be read using pandas.
+ 
 
 To install the do the following in your R environment:
 
@@ -28,6 +30,7 @@ if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
 BiocManager::install("TCGAbiolinks")
+BiocManager::install("EDASeq")
 
 install.packages('feather')
 ```
