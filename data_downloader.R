@@ -5,7 +5,7 @@ library("EDASeq")
 ################# Obtain Gene lengths mapper using bioMart #####################
 ################################################################################
 # Check if the gene lengths file is already present
-if (file.exists(file.path("data", "gene_mapper.feather")) = FALSE) {
+if (file.exists(file.path("data", "gene_mapper.feather")) == FALSE) {
   # Define random project name
   project_name <- "TCGA-ACC"
   # Define the GDC query
@@ -29,11 +29,13 @@ if (file.exists(file.path("data", "gene_mapper.feather")) = FALSE) {
   end_index <- chunk_size
   gene_lengths <- NULL
   # Cycle to get gene lengths of all tcga_ens genes
-  while (start_index < length(tcga_ens_genes)){
+  while (start_index < length(tcga_ens_genes)) {
     # Get a gene names list of size chunk_size
     actual_gene_list <- tcga_ens_genes[start_index:end_index]
     # Get that list lengths with function
-    actual_legths <- getGeneLengthAndGCContent(actual_gene_list, org = "hsa", mode = "biomart")
+    actual_legths <- getGeneLengthAndGCContent(actual_gene_list,
+                                               org = "hsa",
+                                               mode = "biomart")
     # Append result to gene_lengths
     gene_lengths <- rbind(gene_lengths, actual_legths)
     # Print progress
@@ -84,7 +86,9 @@ for (project_name in list_tcga) {
   # Get metadata matrix
   metadata <- query[[1]][[1]]
   # Create directory to save matrices and metadata
-  dir.create(file.path("data", "tcga", "counts", project_name), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path("data", "tcga", "counts", project_name),
+             recursive = TRUE,
+             showWarnings = FALSE)
   # Write data matrix and metadata file
   write_feather(data, file.path("data", "tcga", "counts", project_name, "matrix.feather"))
   write_feather(metadata, file.path("data", "tcga", "counts", project_name, "metadata.feather"))
@@ -94,4 +98,3 @@ for (project_name in list_tcga) {
 print("Deleting temporal data folders and manifest file...")
 unlink("GDCdata", recursive = TRUE)
 unlink("MANIFEST.txt")
-
