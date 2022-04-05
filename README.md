@@ -11,7 +11,7 @@ conda create -n R
 conda activate R
 conda install -c r r-essentials
 ```
-This will install several needed packages of R in anaconda but also give you `R==3.6.0` version that can generate errors while using R Bioconductor. So, upgrade your version using:
+This will install several needed packages of R in anaconda but also give you `R==3.6.0` version that can generate errors while using R Bioconductor. So, upgrade your version usBiocManager::install("AnnotationHub")ing:
 
 ```
 conda install -c conda-forge r-base=4.1.0
@@ -28,8 +28,10 @@ To install the do the following in your R environment:
 R # This should open an R session
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
-
-BiocManager::install("TCGAbiolinks")
+BiocManager::install("BioinformaticsFMRP/TCGAbiolinksGUI.data")
+BiocManager::install("AnnotationHub")
+BiocManager::install("ExperimentHub")
+BiocManager::install("BioinformaticsFMRP/TCGAbiolinks")
 BiocManager::install("EDASeq")
 
 install.packages('feather')
