@@ -4,13 +4,22 @@ import numpy as np
 import os
 import time
 import json
+import torch
+import networkx as nx
+import pickle as pkl
+from sklearn.model_selection import train_test_split
+from scipy.stats import spearmanr
+from scipy.sparse import coo_matrix
+from torch_geometric.utils import from_scipy_sparse_matrix
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 from utils import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class ToilDataset():
-    def __init__(self, path, tcga = True, gtex = True, mean_thr=0.5, std_thr=0.5, corr_thr=0.6, p_thr=0.05,
+    def __init__(self, path, tcga = True, gtex = True, mean_thr=0.5, std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
                 label_type = 'phenotype', force_compute = False):
         self.path = path
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
@@ -21,6 +30,7 @@ class ToilDataset():
         self.gtex = gtex
         self.mean_thr = mean_thr
         self.std_thr = std_thr
+        self.use_graph = use_graph
         self.corr_thr = corr_thr
         self.p_thr = p_thr
         self.label_type = label_type # can be 'phenotype' or 'category'
@@ -31,9 +41,13 @@ class ToilDataset():
         # Filter toil datasets to use GTEx, TCGA or both
         self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
         # Filter genes based on mean and std
-        self.filtered_gene_list, self.filtering_info = self.filter_genes()
+        self.filtered_gene_list, self.filtering_info, self.gene_filtered_data_matrix = self.filter_genes()
         # Get labels and label dictionary
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
+        # Split data into train, validation and test sets
+        self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
+        # Compute correlation graph if use_graph is True
+        self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
     
     def read_toil_data(self):
         """
@@ -117,7 +131,7 @@ class ToilDataset():
     # This function computes the mean and standard deviation of the matrix_data and filters out the samples with mean and standard deviation below the thresholds
     def filter_genes(self):
         if (not os.path.exists(self.dataset_info_path)) or self.force_compute:
-            print("Computing mean, std and list of filtered genes. And saving filtering info to:\n"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
+            print("Computing mean, std and list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
             # Make directory if it does not exist
             os.makedirs(self.dataset_info_path, exist_ok = True)
             # TODO: Remove the need to always compute the mean and std
@@ -147,14 +161,19 @@ class ToilDataset():
             self.plot_filtering_histograms(filtering_info_df)
 
         else:
-            print("Loading filtering info from:\n" + os.path.join(self.dataset_info_path, "filtering_info.csv"))
+            print("Loading filtering info from:\n\t" + os.path.join(self.dataset_info_path, "filtering_info.csv"))
             filtering_info_df = pd.read_csv(os.path.join(self.dataset_info_path, "filtering_info.csv"), index_col = 0)
             # get indices of filtering_info_df that are True in the included column
             gene_list = filtering_info_df.index[filtering_info_df["included"].values == True]
             # Plot histograms with plot_filtering_histograms()
             self.plot_filtering_histograms(filtering_info_df)
+        
+        # Filter tha data matrix based on the gene list
+        gene_filtered_data_matrix = self.matrix_data_filtered.loc[gene_list, :]
 
-        return gene_list.to_list(), filtering_info_df
+        print("Currently working with {} genes...".format(gene_filtered_data_matrix.shape[0]))
+
+        return gene_list.to_list(), filtering_info_df, gene_filtered_data_matrix
 
     # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
     def plot_filtering_histograms(self, filtering_info_df):        
@@ -243,16 +262,131 @@ class ToilDataset():
         else:
             raise ValueError("label_type must be 'category' or 'phenotype'")
         return label_df, lab_txt_2_lab_num
+    
+    # This function uses self.label_df to split the data into train, validation and test sets
+    def split_data(self):
+        train_val_lab, test_lab = train_test_split(self.label_df["lab_num"], test_size = 0.2, random_state = 0, stratify = self.label_df["lab_num"].values)
+        train_lab, val_lab = train_test_split(train_val_lab, test_size = 0.25, random_state = 0, stratify = train_val_lab.values)
+        # Use label indexes to subset the data in self.matrix_data_filtered
+        train_matrix = self.gene_filtered_data_matrix[train_lab.index]
+        val_matrix = self.gene_filtered_data_matrix[val_lab.index]
+        test_matrix = self.gene_filtered_data_matrix[test_lab.index]
+        train_val_matrix = self.gene_filtered_data_matrix[train_val_lab.index]
+        # Declare label dictionaries
+        split_labels = {"train": train_lab, "val": val_lab, "test": test_lab, "train_val": train_val_lab}
+        # Declare matrix dictionaries
+        split_matrices = {"train": train_matrix, "val": val_matrix, "test": test_matrix, "train_val": train_val_matrix}
+        # Both matrixes and labels are already shuffled
+        return split_labels, split_matrices
+    
+    # This function computes a spearman correlation graph between all the genes in the train and val sets
+    def compute_graph(self):
+        
+        # Handle the case when graph is already computed
+        if os.path.exists(os.path.join(self.dataset_info_path, "graph_connectivity.csv")) and (not self.force_compute):
+            
+            print("Loading graph connectivity file from: \n\t{}".format(os.path.join(self.dataset_info_path, "graph_connectivity.csv")))
+            # Read pandas from the csv file
+            graph_df = pd.read_csv(os.path.join(self.dataset_info_path, "graph_connectivity.csv"), index_col = None)
+            # Extract edge indices and edge attrubutes from the dataframe and pass them to tensor
+            edge_indices = torch.Tensor(graph_df[["source", "target"]].values.T).type(torch.long)
+            edge_attributes = torch.Tensor(graph_df["weight"].values).type(torch.long)
 
+            print("Loading graph info file from: \n\t{}".format(os.path.join(self.dataset_info_path, "graph_info.json")))
+            with open(os.path.join(self.dataset_info_path, "graph_info.json"), "r") as f:
+                graph_info = json.load(f)
+        else:
+            print("Computing graph connectivity...")
+            # Transpose train_val matrix
+            x = self.split_matrices["train_val"].T
+            start = time.time()
+            correlation, p_value = spearmanr(x)                                                 # Compute Spearman correlation
+            end = time.time()
+            print("Time to compute spearmanr: {}".format(round(end - start, 2)))
+            valid_corr = np.abs(correlation) > self.corr_thr                                    # Filter based on the correlation threshold
+            valid_p_value = p_value < self.p_thr                                                # Filter based in p_value threshold
+            adjacency_matrix = np.logical_and(valid_corr, valid_p_value).astype(int)            # Compose both filters
+            adjacency_matrix = adjacency_matrix - np.eye(adjacency_matrix.shape[0], dtype=int)  # Discard self loops
+            adjacency_sparse = coo_matrix(adjacency_matrix)                                     # Pass to sparse matrix
+            adjacency_sparse.eliminate_zeros()                                                  # Delete zeros from representation
+            edge_indices, edge_attributes = from_scipy_sparse_matrix(adjacency_sparse)          # Get edges and weights in tensors
+            
+            # Save edge indexs and attributes to a csv file
+            graph_df = pd.DataFrame(edge_indices.T.numpy(), columns=["source", "target"])
+            graph_df["weight"] = edge_attributes.numpy()
+            # TODO: Also save the gene list with numbers to interpret the graph connectivity csv file
+            graph_df.to_csv(os.path.join(self.dataset_info_path, "graph_connectivity.csv"), index=False)
+
+            # Compute graph statistics
+            print('Computing graph info...')
+            nx_graph = nx.from_scipy_sparse_matrix(adjacency_sparse)
+            connected_bool = nx.is_connected(nx_graph)
+            length_connected = [len(c) for c in sorted(nx.connected_components(nx_graph), key=len, reverse=False)]
+            graph_info ={
+                        "Node number" : x.shape[1],
+                        "Edge number" : edge_indices.shape[1]//2,
+                        "Average degree" : round(edge_indices.shape[1]/x.shape[1], 2),
+                        "Connected" : connected_bool,
+                        "Biggest Con. Comp." : length_connected[-1]
+                        }
+            # Save normal_tcga_mapper mappers to file
+            with open(os.path.join(self.dataset_info_path, "graph_info.json"), 'w') as f:
+                json.dump(graph_info, f, indent=4)
+
+        # Print graph info dictionary
+        print("Graph info:")
+        for key, value in graph_info.items():
+            print("\t{}: {}".format(key, value))
+        return edge_indices, edge_attributes
+
+        # TODO: Add a function that handles a possible subsampling of the data
+
+    # This function gets the dataloaders for the train, val and test sets
+    def get_dataloaders(self, batch_size):
+        # Cast data as tensors
+        # These data matrices have samples in rows and genes in columns
+        x_train = torch.Tensor(self.split_matrices["train"].T, dtype=torch.float)
+        x_val = torch.Tensor(self.split_matrices["val"].T, dtype=torch.float)
+        x_test = torch.Tensor(self.split_matrices["test"].T, dtype=torch.float)
+        # Cast labels as tensors
+        y_train = torch.Tensor(self.split_labels["train"].values, dtype=torch.long)
+        y_val = torch.Tensor(self.split_labels["val"].values, dtype=torch.long)
+        y_test = torch.Tensor(self.split_labels["test"].values, dtype=torch.long)
+        # Define train graph list
+        train_graph_list = [Data(x=torch.unsqueeze(x_train[i, :], 1),
+                                 y=y_train[i],
+                                 edge_index=self.edge_indices,
+                                 edge_attr=self.edge_attributes,
+                                 num_nodes= len(x_train[i,:])) for i in range(x_train.shape[0])]
+        # Define val graph list
+        val_graph_list = [Data(x=torch.unsqueeze(x_val[i, :], 1),
+                               y=y_val[i],
+                               edge_index=self.edge_indices,
+                               edge_attr=self.edge_attributes,
+                               num_nodes= len(x_val[i,:])) for i in range(x_val.shape[0])]
+        # Define test graph list
+        test_graph_list = [Data(x=torch.unsqueeze(x_test[i, :], 1),
+                                y=y_test[i],
+                                edge_index=self.edge_indices,
+                                edge_attr=self.edge_attributes,
+                                num_nodes= len(x_test[i,:])) for i in range(x_test.shape[0])]
+
+        # Create dataloaders
+        train_loader = DataLoader(train_graph_list, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_graph_list, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(test_graph_list, batch_size=batch_size, shuffle=True)
+        return train_loader, val_loader, test_loader
+        
 
 test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
                                 tcga = True,
                                 gtex = True,
-                                mean_thr = -10.0,
+                                mean_thr = 3.0,
                                 std_thr = 0.5,
+                                use_graph = True,
                                 corr_thr = 0.6,
                                 p_thr = 0.05,
                                 label_type = 'phenotype',
-                                force_compute = False)
+                                force_compute = True)
 
 
