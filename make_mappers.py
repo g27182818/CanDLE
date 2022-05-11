@@ -177,9 +177,9 @@ normal_tcga_mapper = {  'Bile duct':            'GTEX-LIV',     # Problematic 9 
                         'Thyroid Gland':        'GTEX-THY'
                         }
 
-# Define a label mapper for all the values in category mapper
-sorted_labels = sorted(category_mapper.values())
-label_mapper = {value: i for i, value in enumerate(sorted_labels)}
+# # Define a label mapper for all the values in category mapper
+# sorted_labels = sorted(category_mapper.values())
+# label_mapper = {value: i for i, value in enumerate(sorted_labels)}
 
 # Create mapper directory if there is not one
 if not os.path.exists(os.path.join("data", "toil_data", "mappers")):
@@ -194,6 +194,6 @@ with open(os.path.join("data", "toil_data", "mappers", "phenotype_mapper.json"),
 # Save category mapper to file
 with open(os.path.join("data", "toil_data", "mappers", "category_mapper.json"), 'w') as f:
     json.dump(category_mapper, f, indent=4)
-# Save label mapper to file
-with open(os.path.join("data", "toil_data", "mappers", "lab_txt_2_lab_num_mapper.json"), 'w') as f:
-    json.dump(label_mapper, f, indent=4)
+# # Save label mapper to file
+# with open(os.path.join("data", "toil_data", "mappers", "lab_txt_2_lab_num_mapper.json"), 'w') as f:
+#     json.dump(label_mapper, f, indent=4)

@@ -48,7 +48,7 @@ class ToilDataset():
         self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
         # Compute correlation graph if use_graph is True
         self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
-    
+
     def read_toil_data(self):
         """
         Reads data from the Toil data set with root path and returns matrix_data, categories and phenotypes dataframes.
@@ -221,9 +221,7 @@ class ToilDataset():
 
     # This function extracts the labels from categories_filtered or phenotypes_filtered and returns a list of labels and a dictionary of categories to labels
     def find_labels(self):
-        # Load the mapper from textual labels to numerical labels
-        with open(os.path.join(self.path, "mappers", "lab_txt_2_lab_num_mapper.json"), "r") as f:
-                lab_txt_2_lab_num = json.load(f)
+        
         # Load mapper dict from normal TCGA samples to GTEX category
         with open(os.path.join(self.path, "mappers", "normal_tcga_2_gtex_mapper.json"), "r") as f:
             normal_tcga_2_gtex = json.load(f)
@@ -238,6 +236,11 @@ class ToilDataset():
             # Note: The self.categories_filtered dataframe does not contain any normal (Healthy) TCGA samples.
             # Add one column to the label_df with mapping from TCGA_GTEX_main_category column with cat_2_lab_txt dictionary
             label_df["lab_txt"] = label_df["TCGA_GTEX_main_category"].map(cat_2_lab_txt)
+            # Get unique textual labels obtained and sort them
+            current_labels = sorted(label_df["lab_txt"].unique().tolist())
+            # Define lab_txt_2_lab_num dictionary
+            lab_txt_2_lab_num = {lab_txt: i for i, lab_txt in enumerate(current_labels)}
+
             # Define numeric labels from the textual labels in label_df
             label_df["lab_num"] = label_df["lab_txt"].map(lab_txt_2_lab_num)
 
@@ -257,10 +260,18 @@ class ToilDataset():
 
             # Map phenotype detailed category to textual label in label_df for the non normal (Healthy) TCGA samples
             label_df.loc[label_df["lab_txt"] == 0, "lab_txt"] = label_df.loc[label_df["lab_txt"] == 0, "detailed_category"].map(pheno_2_lab_txt)
+            # Get unique textual labels obtained and sort them
+            current_labels = sorted(label_df["lab_txt"].unique().tolist())
+            # Define lab_txt_2_lab_num dictionary
+            lab_txt_2_lab_num = {lab_txt: i for i, lab_txt in enumerate(current_labels)}
             # Define numeric labels from the textual labels in label_df
             label_df["lab_num"] = label_df["lab_txt"].map(lab_txt_2_lab_num)
         else:
             raise ValueError("label_type must be 'category' or 'phenotype'")
+        
+        # Save lab_txt_2_lab_num dictionary to json file
+        with open(os.path.join(self.dataset_info_path, "lab_txt_2_lab_num_mapper.json"), "w") as f:
+            json.dump(lab_txt_2_lab_num, f, indent = 4)
         return label_df, lab_txt_2_lab_num
     
     # This function uses self.label_df to split the data into train, validation and test sets
