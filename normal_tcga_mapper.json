@@ -1,0 +1,22 @@
+{
+    "Bile duct": "GTEX-LIV",
+    "Bladder": "GTEX-BLA",
+    "Breast": "GTEX-BRE",
+    "Cervix": "GTEX-CER",
+    "Colon": "GTEX-COL",
+    "Endometrium": "GTEX-UTE",
+    "Esophagus": "GTEX-ESO",
+    "Head and Neck region": "GTEX-SKI",
+    "Kidney": "GTEX-KID",
+    "Liver": "GTEX-LIV",
+    "Lung": "GTEX-LUN",
+    "Pancreas": "GTEX-PAN",
+    "Paraganglia": "GTEX-ADR_GLA",
+    "Prostate": "GTEX-PRO",
+    "Rectum": "GTEX-COL",
+    "Skin": "GTEX-SKI",
+    "Soft tissue,Bone": "GTEX-ADI",
+    "Stomach": "GTEX-STO",
+    "Thymus": "GTEX-SKI",
+    "Thyroid Gland": "GTEX-THY"
+}

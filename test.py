@@ -3,8 +3,10 @@ import pandas as pd
 import numpy as np
 import os
 import time
+import json
 from utils import *
 
+pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class ToilDataset():
@@ -31,7 +33,7 @@ class ToilDataset():
         # Filter genes based on mean and std
         self.filtered_gene_list, self.filtering_info = self.filter_genes()
         # Get labels and label dictionary
-        self.label_df, self.category2label = self.find_labels()
+        self.label_df, self.lab_txt_2_lab_num = self.find_labels()
     
     def read_toil_data(self):
         """
@@ -200,200 +202,47 @@ class ToilDataset():
 
     # This function extracts the labels from categories_filtered or phenotypes_filtered and returns a list of labels and a dictionary of categories to labels
     def find_labels(self):
-        category2label = {}
-        label_df = 0
+        # Load the mapper from textual labels to numerical labels
+        with open(os.path.join(self.path, "mappers", "lab_txt_2_lab_num_mapper.json"), "r") as f:
+                lab_txt_2_lab_num = json.load(f)
+        # Load mapper dict from normal TCGA samples to GTEX category
+        with open(os.path.join(self.path, "mappers", "normal_tcga_2_gtex_mapper.json"), "r") as f:
+            normal_tcga_2_gtex = json.load(f)
 
         if self.label_type == 'category':
             label_df = self.categories_filtered
-            unique_classes = np.sort(label_df.TCGA_GTEX_main_category.unique())
-            print(unique_classes)
+            
+            # Load the categories to textual labels dictionary.
+            with open(os.path.join(self.path, "mappers", "category_mapper.json"), "r") as f:
+                cat_2_lab_txt = json.load(f)
+
+            # Note: The self.categories_filtered dataframe does not contain any normal (Healthy) TCGA samples.
+            # Add one column to the label_df with mapping from TCGA_GTEX_main_category column with cat_2_lab_txt dictionary
+            label_df["lab_txt"] = label_df["TCGA_GTEX_main_category"].map(cat_2_lab_txt)
+            # Define numeric labels from the textual labels in label_df
+            label_df["lab_num"] = label_df["lab_txt"].map(lab_txt_2_lab_num)
+
         elif self.label_type == 'phenotype':
             label_df = self.phenotypes_filtered
-            # Detailed categories column has exactly the same information as primary desease or tissue column
-            unique_classes_gtex = np.sort(label_df.detailed_category[label_df['_study']=='GTEX'].unique().astype(str))
-            unique_classes_tcga = np.sort(label_df.detailed_category[label_df['_study']=='TCGA'].unique().astype(str))
-            unique_tissues_tcga = np.sort(label_df._primary_site[label_df['_sample_type']=='Solid Tissue Normal'].unique().astype(str))
-            print(unique_classes_gtex)
-            print(unique_classes_tcga)
-            print(unique_tissues_tcga)
-            breakpoint()
-        return label_df, category2label
 
-category_mapper = {'GTEX Adipose Tissue':                       'GTEX-ADI',
-                   'GTEX Adrenal Gland':                        'GTEX-ADR_GLA',
-                   'GTEX Bladder':                              'GTEX-BLA',
-                   'GTEX Blood':                                'GTEX-BLO',
-                   'GTEX Blood Vessel':                         'GTEX-BLO_VSL',
-                   'GTEX Brain':                                'GTEX-BRA',
-                   'GTEX Breast':                               'GTEX-BRE',
-                   'GTEX Cervix Uteri':                         'GTEX-CER',
-                   'GTEX Colon':                                'GTEX-COL',
-                   'GTEX Esophagus':                            'GTEX-ESO',
-                   'GTEX Fallopian Tube':                       'GTEX-FAL_TUB',
-                   'GTEX Heart':                                'GTEX-HEA',
-                   'GTEX Kidney':                               'GTEX-KID',
-                   'GTEX Liver':                                'GTEX-LIV',
-                   'GTEX Lung':                                 'GTEX-LUN',
-                   'GTEX Muscle':                               'GTEX-MUS',
-                   'GTEX Nerve':                                'GTEX-NER',
-                   'GTEX Ovary':                                'GTEX-OVA',
-                   'GTEX Pancreas':                             'GTEX-PAN',
-                   'GTEX Pituitary':                            'GTEX-PIT',
-                   'GTEX Prostate':                             'GTEX-PRO',
-                   'GTEX Salivary Gland':                       'GTEX-SAL_GLA',
-                   'GTEX Skin':                                 'GTEX-SKI',
-                   'GTEX Small Intestine':                      'GTEX-SMA_INT',
-                   'GTEX Spleen':                               'GTEX-SPL',
-                   'GTEX Stomach':                              'GTEX-STO',
-                   'GTEX Testis':                               'GTEX-TES',
-                   'GTEX Thyroid':                              'GTEX-THY',
-                   'GTEX Uterus':                               'GTEX-UTE',
-                   'GTEX Vagina':                               'GTEX-VAG',
-                   'TCGA Acute Myeloid Leukemia':               'TCGA-LAML',
-                   'TCGA Adrenocortical Cancer':                'TCGA-ACC',
-                   'TCGA Bladder Urothelial Carcinoma':         'TCGA-BLCA',
-                   'TCGA Brain Lower Grade Glioma':             'TCGA-LGG',
-                   'TCGA Breast Invasive Carcinoma':            'TCGA-BRCA',
-                   'TCGA Cervical & Endocervical Cancer':       'TCGA-CESC',
-                   'TCGA Cholangiocarcinoma':                   'TCGA-CHOL',
-                   'TCGA Colon Adenocarcinoma':                 'TCGA-COAD',
-                   'TCGA Diffuse Large B-Cell Lymphoma':        'TCGA-DLBC',
-                   'TCGA Esophageal Carcinoma':                 'TCGA-ESCA',
-                   'TCGA Glioblastoma Multiforme':              'TCGA-GBM',
-                   'TCGA Head & Neck Squamous Cell Carcinoma':  'TCGA-HNSC',
-                   'TCGA Kidney Chromophobe':                   'TCGA-KICH',
-                   'TCGA Kidney Clear Cell Carcinoma':          'TCGA-KIRC',
-                   'TCGA Kidney Papillary Cell Carcinoma':      'TCGA-KIRP',
-                   'TCGA Liver Hepatocellular Carcinoma':       'TCGA-LIHC',
-                   'TCGA Lung Adenocarcinoma':                  'TCGA-LUAD',
-                   'TCGA Lung Squamous Cell Carcinoma':         'TCGA-LUSC',
-                   'TCGA Mesothelioma':                         'TCGA-MESO',
-                   'TCGA Ovarian Serous Cystadenocarcinoma':    'TCGA-OV',
-                   'TCGA Pancreatic Adenocarcinoma':            'TCGA-PAAD',
-                   'TCGA Pheochromocytoma & Paraganglioma':     'TCGA-PCPG',
-                   'TCGA Prostate Adenocarcinoma':              'TCGA-PRAD',
-                   'TCGA Rectum Adenocarcinoma':                'TCGA-READ',
-                   'TCGA Sarcoma':                              'TCGA-SARC',
-                   'TCGA Skin Cutaneous Melanoma':              'TCGA-SKCM',
-                   'TCGA Stomach Adenocarcinoma':               'TCGA-STAD',
-                   'TCGA Testicular Germ Cell Tumor':           'TCGA-TGCT',
-                   'TCGA Thymoma':                              'TCGA-THYM',
-                   'TCGA Thyroid Carcinoma':                    'TCGA-THCA',
-                   'TCGA Uterine Carcinosarcoma':               'TCGA-UCS',
-                   'TCGA Uterine Corpus Endometrioid Carcinoma':'TCGA-UCEC',
-                   'TCGA Uveal Melanoma':                       'TCGA-UVM'
-                   }
+            # Load the phenotypes to textual labels dictionary.
+            with open(os.path.join(self.path, "mappers", "phenotype_mapper.json"), "r") as f:
+                pheno_2_lab_txt = json.load(f)
 
-phenotype_mapper = {'Adipose - Subcutaneous':                       'GTEX-ADI', 
-                    'Adipose - Visceral (Omentum)':                 'GTEX-ADI',
-                    'Adrenal Gland':                                'GTEX-ADR_GLA',
-                    'Artery - Aorta':                               'GTEX-BLO_VSL',
-                    'Artery - Coronary':                            'GTEX-BLO_VSL',
-                    'Artery - Tibial':                              'GTEX-BLO_VSL',
-                    'Bladder':                                      'GTEX-BLA',
-                    'Brain - Amygdala':                             'GTEX-BRA',
-                    'Brain - Anterior Cingulate Cortex (Ba24)':     'GTEX-BRA',
-                    'Brain - Caudate (Basal Ganglia)':              'GTEX-BRA',
-                    'Brain - Cerebellar Hemisphere':                'GTEX-BRA',
-                    'Brain - Cerebellum':                           'GTEX-BRA',
-                    'Brain - Cortex':                               'GTEX-BRA',
-                    'Brain - Frontal Cortex (Ba9)':                 'GTEX-BRA',
-                    'Brain - Hippocampus':                          'GTEX-BRA',
-                    'Brain - Hypothalamus':                         'GTEX-BRA',
-                    'Brain - Nucleus Accumbens (Basal Ganglia)':    'GTEX-BRA',
-                    'Brain - Putamen (Basal Ganglia)':              'GTEX-BRA',
-                    'Brain - Spinal Cord (Cervical C-1)':           'GTEX-BRA',
-                    'Brain - Substantia Nigra':                     'GTEX-BRA',
-                    'Breast - Mammary Tissue':                      'GTEX-BRE',
-                    'Cells - Ebv-Transformed Lymphocytes':          'GTEX-BLO',
-                    'Cells - Leukemia Cell Line (Cml)':             'TCGA-LAML', # This is a problematic category because it is GTEX but appears to be of sick patients
-                    'Cells - Transformed Fibroblasts':              'GTEX-SKI',
-                    'Cervix - Ectocervix':                          'GTEX-CER',
-                    'Cervix - Endocervix':                          'GTEX-CER',
-                    'Colon - Sigmoid':                              'GTEX-COL',
-                    'Colon - Transverse':                           'GTEX-COL',
-                    'Esophagus - Gastroesophageal Junction':        'GTEX-ESO',
-                    'Esophagus - Mucosa':                           'GTEX-ESO',
-                    'Esophagus - Muscularis':                       'GTEX-ESO',
-                    'Fallopian Tube':                               'GTEX-FAL_TUB',
-                    'Heart - Atrial Appendage':                     'GTEX-HEA',
-                    'Heart - Left Ventricle':                       'GTEX-HEA',
-                    'Kidney - Cortex':                              'GTEX-KID',
-                    'Liver':                                        'GTEX-LIV',
-                    'Lung':                                         'GTEX-LUN',
-                    'Minor Salivary Gland':                         'GTEX-SAL_GLA',
-                    'Muscle - Skeletal':                            'GTEX-MUS',
-                    'Nerve - Tibial':                               'GTEX-NER',
-                    'Ovary':                                        'GTEX-OVA',
-                    'Pancreas':                                     'GTEX-PAN',
-                    'Pituitary':                                    'GTEX-PIT',
-                    'Prostate':                                     'GTEX-PRO',
-                    'Skin - Not Sun Exposed (Suprapubic)':          'GTEX-SKI',
-                    'Skin - Sun Exposed (Lower Leg)':               'GTEX-SKI',
-                    'Small Intestine - Terminal Ileum':             'GTEX-SMA_INT',
-                    'Spleen':                                       'GTEX-SPL',
-                    'Stomach':                                      'GTEX-STO',
-                    'Testis':                                       'GTEX-TES',
-                    'Thyroid':                                      'GTEX-THY',
-                    'Uterus':                                       'GTEX-UTE',
-                    'Vagina':                                       'GTEX-VAG',
-                    'Whole Blood':                                  'GTEX-BLO',
-                    'Acute Myeloid Leukemia':                       'TCGA-LAML',
-                    'Adrenocortical Cancer':                        'TCGA-ACC',
-                    'Bladder Urothelial Carcinoma':                 'TCGA-BLCA',
-                    'Brain Lower Grade Glioma':                     'TCGA-LGG',
-                    'Breast Invasive Carcinoma':                    'TCGA-BRCA',
-                    'Cervical & Endocervical Cancer':               'TCGA-CESC',
-                    'Cholangiocarcinoma':                           'TCGA-CHOL',
-                    'Colon Adenocarcinoma':                         'TCGA-COAD',
-                    'Diffuse Large B-Cell Lymphoma':                'TCGA-DLBC',
-                    'Esophageal Carcinoma':                         'TCGA-ESCA',
-                    'Glioblastoma Multiforme':                      'TCGA-GBM',
-                    'Head & Neck Squamous Cell Carcinoma':          'TCGA-HNSC',
-                    'Kidney Chromophobe':                           'TCGA-KICH',
-                    'Kidney Clear Cell Carcinoma':                  'TCGA-KIRC',
-                    'Kidney Papillary Cell Carcinoma':              'TCGA-KIRP',
-                    'Liver Hepatocellular Carcinoma':               'TCGA-LIHC',
-                    'Lung Adenocarcinoma':                          'TCGA-LUAD',
-                    'Lung Squamous Cell Carcinoma':                 'TCGA-LUSC',
-                    'Mesothelioma':                                 'TCGA-MESO',
-                    'Ovarian Serous Cystadenocarcinoma':            'TCGA-OV',
-                    'Pancreatic Adenocarcinoma':                    'TCGA-PAAD',
-                    'Pheochromocytoma & Paraganglioma':             'TCGA-PCPG',
-                    'Prostate Adenocarcinoma':                      'TCGA-PRAD',
-                    'Rectum Adenocarcinoma':                        'TCGA-READ',
-                    'Sarcoma':                                      'TCGA-SARC',
-                    'Skin Cutaneous Melanoma':                      'TCGA-SKCM',
-                    'Stomach Adenocarcinoma':                       'TCGA-STAD',
-                    'Testicular Germ Cell Tumor':                   'TCGA-TGCT',
-                    'Thymoma':                                      'TCGA-THYM',
-                    'Thyroid Carcinoma':                            'TCGA-THCA',
-                    'Uterine Carcinosarcoma':                       'TCGA-UCS',
-                    'Uterine Corpus Endometrioid Carcinoma':        'TCGA-UCEC',
-                    'Uveal Melanoma':                               'TCGA-UVM'
-                    }
-# There are a total of 93/738 problematic categories
-normal_tcga_mapper = {  'Bile duct':            'GTEX-LIV',     # Problematic 9 samples
-                        'Bladder':              'GTEX-BLA',
-                        'Breast':               'GTEX-BRE',
-                        'Cervix':               'GTEX-CER',
-                        'Colon':                'GTEX-COL',
-                        'Endometrium':          'GTEX-UTE',     # Problematic 23 samples
-                        'Esophagus':            'GTEX-ESO',
-                        'Head and Neck region': 'GTEX-SKI',     # Problematic 44 samples (Squamous cells are found in the outer layer of skin and in the mucous membranes)
-                        'Kidney':               'GTEX-KID',
-                        'Liver':                'GTEX-LIV',
-                        'Lung':                 'GTEX-LUN',
-                        'Pancreas':             'GTEX-PAN',
-                        'Paraganglia':          'GTEX-ADR_GLA', # Problematic 3 samples
-                        'Prostate':             'GTEX-PRO',
-                        'Rectum':               'GTEX-COL',     # Problematic 10 samples
-                        'Skin':                 'GTEX-SKI',
-                        'Soft tissue,Bone':     'GTEX-ADI',     # Problematic 2 samples
-                        'Stomach':              'GTEX-STO',
-                        'Thymus':               'GTEX-SKI',     # Problematic 2 samples (Thymoma and thymic carcinoma, also called thymic epithelial tumors (TETs))
-                        'Thyroid Gland':        'GTEX-THY'
-                        }
+            # Declare a new empty column in the label_df for textual labels
+            label_df["lab_txt"] = 0
+            # Find sample names of normal (Healthy) TCGA subjects
+            normal_tcga_samples = self.phenotypes_filtered[self.phenotypes_filtered["_sample_type"] == "Solid Tissue Normal"].index
+            # Put GTEX textual label in lab_txt column for normal (Healthy) TCGA samples
+            label_df.loc[normal_tcga_samples, "lab_txt"] = label_df.loc[normal_tcga_samples, "_primary_site"].map(normal_tcga_2_gtex)
+
+            # Map phenotype detailed category to textual label in label_df for the non normal (Healthy) TCGA samples
+            label_df.loc[label_df["lab_txt"] == 0, "lab_txt"] = label_df.loc[label_df["lab_txt"] == 0, "detailed_category"].map(pheno_2_lab_txt)
+            # Define numeric labels from the textual labels in label_df
+            label_df["lab_num"] = label_df["lab_txt"].map(lab_txt_2_lab_num)
+        else:
+            raise ValueError("label_type must be 'category' or 'phenotype'")
+        return label_df, lab_txt_2_lab_num
 
 
 test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
