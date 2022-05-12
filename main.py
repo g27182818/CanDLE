@@ -14,7 +14,7 @@ import pandas as pd
 # Import auxiliary functions
 from utils import *
 from model import *
-from dataloader import *
+from datasets import *
 # Set matplotlib option to plot while in screen
 import matplotlib
 matplotlib.use('Agg')
@@ -53,7 +53,7 @@ p_value_thr = 0.05                  # P-value Spearman correlation threshold for
 hidd = 8                            # Hidden channels parameter for baseline model                                     #
 model_type = "MLP_ALL"              # Model type, can be "MLP_FIL", "MLP_ALL", "BASELINE"                              #
 # Training parameters -------------------------------------------------------------------------------------------------#
-experiment_name = "TEST_TCGA_VS_GTEX"# Experiment name to define path were results are stored                           #
+experiment_name = "test_toil_just_gtex"       # Experiment name to define path were results are stored                           #
 lr = 0.00001                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
 total_epochs = 20                   # Total number of epochs to train                                                  #
 metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
@@ -65,194 +65,46 @@ test_eps = args.adv_e_test          # Adversarial epsilon for test              
 
 # Handle input filtering depending in model type
 if model_type == "MLP_FIL":
-    mean_thr = 0.5  # Mean threshold for filtering input genes
-    std_thr = 0.8  # Standard deviation threshold for filtering input genes
-    # Obtain data matrices (in numpy) from dataloader funciton. X and Y are already shuffled
-    X_np, Y_np, ID, loc2gene = matrixloader(mean_thr, std_thr)
-    # Obtain edges and edges atributes, it assigns empty tensors.
-    edge_indices, edge_attributes = torch.empty((2, 1)), torch.empty((1,))
-
+    mean_thr = 3.0  # Mean threshold for filtering input genes
+    std_thr = 0.5   # Standard deviation threshold for filtering input genes
+    use_graph = False
 elif model_type == "BASELINE":
-    mean_thr = 0.5  # Mean threshold for filtering input genes
-    std_thr = 0.8  # Standard deviation threshold for filtering input genes
-    # Obtain data matrices (in numpy) from dataloader funciton. X and Y are already shuffled
-    X_np, Y_np, ID, loc2gene = matrixloader(mean_thr, std_thr)
-    # Obtain edges and edges atributes
-    edge_indices, edge_attributes = generate_graph_adjacency(X_np, coor_thr, p_value_thr)
-
+    mean_thr = 3.0  # Mean threshold for filtering input genes
+    std_thr = 0.5   # Standard deviation threshold for filtering input genes
+    use_graph = True
 elif model_type == "MLP_ALL":
-    mean_thr = 0.0  # Mean threshold for filtering input genes
-    std_thr = 0.0  # Standard deviation threshold for filtering input genes
-    ########################################################################################
-    # TEMPORAL CODE MADE TO INTEGRATE GTEX DATA ############################################
-    ########################################################################################
-    compute = False
-    gtex = True
-    filter_intersection = True
-    tcga_nt = True
-
-    if compute ==True:
-        print('Computing final dataset. Will be stored in: '+os.path.join('final_dataset', 'X.feather'))
-        print('Started reading TCGA data...')
-        # Obtain data matrices (in numpy) from dataloader funciton. X and Y are already shuffled
-        X_tcga, Y_tcga, ID, loc2gene = matrixloader(mean_thr, std_thr)
-        
-        # Remove normal from TCGA if gtex is used
-        if not tcga_nt:
-            print('Removing Normal TCGA data for GTEx integration...')
-            # Remove normal TCGA dada
-            remove_normal_index_tcga = Y_tcga != 0
-            Y_tcga = Y_tcga[remove_normal_index_tcga]
-            X_tcga = X_tcga[remove_normal_index_tcga, :]
-            # Lower annotations one unit (due to removal of Normal TCGA tissue) 
-            Y_tcga = Y_tcga - 1
-
-        if filter_intersection == True:
-            print('Filtering TCGA data...')
-            # Compute dictionary mapping each gene name to column index in X_tcga
-            gene2loc = dict((v, k) for k, v in loc2gene.items())
-            df_gene2loc = pd.DataFrame.from_dict(gene2loc, orient='index')
-            
-            # Read intersection genes
-            intersection_genes = pd.read_pickle('gene_intersection.pkl')
-
-            # Unexpected new intersection being performed
-            intersection_list = list(set(intersection_genes.tolist())&set(df_gene2loc.index))
-            intersection_list = sorted(intersection_list)
-
-            # Find locations of intersection genes in X_tcga
-            locations = df_gene2loc.loc[intersection_list]
-
-            # Filter X_tcga in intersection genes locations
-            X_tcga = X_tcga[:, np.ravel(locations.to_numpy())]
-
-        print('Performing transformations on TCGA data...')
-        X_tcga = fpkm2tpm(X_tcga, log2 = True, pre_log2 = True)
-
-        if gtex == True:
-            # Load tissue2annotation dict
-            with open(os.path.join('processed_gtex', 'gtex_tissue2annot.pkl'), 'rb') as f:
-                tissue2annot = pickle.load(f)
-            # Read complete dataset with feather
-            print('Started reading GTEx data with feather...')
-            start = time.time()
-            feather_gtex = pd.read_feather(os.path.join('processed_gtex', 'complete_dataframe.feather'), use_threads=True)
-            final = time.time()
-            print('Read GTEx feather process took: '+str(round(final-start, 3)) + ' s')
-            # Read ordered genes
-            ordered_genes_gtex = pd.read_pickle(os.path.join('processed_gtex', 'ordered_genes.pkl'))
-            Y_gtex = feather_gtex['tissue'].map(tissue2annot).values
-            X_gtex = feather_gtex.loc[:, ~feather_gtex.columns.isin(['tissue', 'index'])].values
-
-            print('Filtering GTEx data...')
-            # Filter X_gtex with intersection list the same was that was done with X_tcga
-            gene2loc_gtex = {ordered_genes_gtex[i]:i for i in range(len(ordered_genes_gtex))}
-            df_gene2loc_gtex = pd.DataFrame.from_dict(gene2loc_gtex, orient='index')
-            locations_gtex = df_gene2loc_gtex.loc[intersection_list]
-            X_gtex = X_gtex[:, np.ravel(locations_gtex.to_numpy())]
-
-            print('Transforming GTEx data...')
-            X_gtex = np.log2(X_gtex+1)
-
-            if tcga_nt == True:
-                Y_gtex += 1
-
-            # Create unified X_np matrix
-            print('Merging TCGA and GTEx data...')
-            X_np = np.vstack((X_tcga, X_gtex))
-            Y_np = np.concatenate((Y_tcga, Y_gtex))
-        
-        else:
-            X_np = X_tcga
-            Y_np = Y_tcga
-
-        # Specify seed for shuffle
-        print('Shuffling complete data...')
-        np.random.seed(1)
-        shuffler = np.random.permutation(len(X_np))
-        X_np = X_np[shuffler]
-        Y_np = Y_np[shuffler]
-
-        # Create save directories
-        try:
-            os.makedirs(os.path.join('final_dataset'))
-        except:
-            print(os.path.join('final_dataset')+" directory already exist")
-        
-        print('Saving complete dataset with feather...')
-        pd.DataFrame(X_np, columns=intersection_list).to_feather(os.path.join('final_dataset', 'X.feather'))
-        pd.DataFrame(Y_np, columns=['annotations']).to_feather(os.path.join('final_dataset', 'Y.feather'))
-        print('Saving intersection genes to file...')
-        with open(os.path.join('final_dataset', 'intersection_genes.pkl'), 'wb') as f:
-            pickle.dump(intersection_list, f)
-    else:
-        print('Loading final dataset from: '+os.path.join('final_dataset', 'X.feather'))
-        # Load important variables from files
-        X_np = pd.read_feather(os.path.join('final_dataset', 'X.feather')).values
-        Y_np = pd.read_feather(os.path.join('final_dataset', 'Y.feather')).values
-        intersection_list = pd.read_pickle(os.path.join('final_dataset', 'intersection_genes.pkl'))
-
-    #########################################################################################
-    #########################################################################################
-    #########################################################################################
-    # Obtain edges and edges atrubutes, it assigns empty tensors.
-    edge_indices, edge_attributes = torch.empty((2, 1)), torch.empty((1,))
-
+    mean_thr = -10.0  # Mean threshold for filtering input genes
+    std_thr = -1.0    # Standard deviation threshold for filtering input genes
+    use_graph = False
 else:
     raise NotImplementedError
 
-# Define number of classes
-classes_number = int(np.max(Y_np)+1)
 
-# Assign train and validation data in numpy
-X_val_np = X_np[int((1-val_fraction)*X_np.shape[0]):, :]
-Y_val_np = Y_np[int((1-val_fraction)*X_np.shape[0]):]
-
-X_train_np = X_np[0:int((1-val_fraction)*X_np.shape[0]), :]
-Y_train_np = Y_np[0:int((1-val_fraction)*X_np.shape[0])]
-
-# Handle possible subsampling of train set
-if (train_smaples > -1) & (train_smaples < X_train_np.shape[0]-np.max(Y_val_np)):
-    X_train_np, _, Y_train_np, _ = train_test_split(X_train_np, Y_train_np,
-                                                    stratify=Y_train_np,
-                                                    train_size=train_smaples,
-                                                    random_state=0)
-
-# Transform to tensors train data
-X_train = torch.tensor(X_train_np, dtype=torch.float)
-Y_train = torch.tensor(Y_train_np)
-
-# Transform to tensors validation data
-X_val = torch.tensor(X_val_np, dtype=torch.float)
-Y_val = torch.tensor(Y_val_np)
-
-# Define datalists of graphs
-train_graph_list = [Data(x=torch.unsqueeze(X_train[i, :], 1),
-                         y=Y_train[i],
-                         edge_index=edge_indices,
-                         edge_attributes=edge_attributes,
-                         num_nodes=len(X_train[i, :])) for i in range(X_train.shape[0])]
-
-val_graph_list = [Data(x=torch.unsqueeze(X_val[i, :], 1),
-                       y=Y_val[i],
-                       edge_index=edge_indices,
-                       edge_attributes=edge_attributes,
-                       num_nodes=len(X_val[i, :])) for i in range(X_val.shape[0])]
+dataset = ToilDataset(os.path.join("data", "toil_data"),
+                            tcga = False,
+                            gtex = True,
+                            mean_thr = mean_thr,
+                            std_thr = std_thr,
+                            use_graph = use_graph,
+                            corr_thr = coor_thr,
+                            p_thr = p_value_thr,
+                            label_type = 'phenotype',
+                            force_compute = False)
 
 # Dataloader declaration
-train_loader = DataLoader(train_graph_list, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_graph_list, batch_size=batch_size)
+train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = batch_size)
+
 
 # Calculate loss function weights
-distribution = np.bincount(np.ravel(Y_np).astype(np.int64))
+distribution = np.bincount(np.ravel(dataset.split_labels["train_val"].values).astype(np.int64))
 loss_wieghts = 200 / distribution
 lw_tensor = torch.tensor(loss_wieghts, dtype=torch.float).to(device)
 
 # Handle model definition based on model type
 if model_type == "MLP_FIL" or model_type == "MLP_ALL":
-    model = MLP([X_np.shape[1]], out_size = classes_number ).to(device)
+    model = MLP([len(dataset.filtered_gene_list)], out_size = dataset.num_classes ).to(device)
 elif model_type == "BASELINE":
-    model = BaselineModel(hidden_channels=hidd, input_size=X_np.shape[1], out_size=classes_number).to(device)
+    model = BaselineModel(hidden_channels=hidd, input_size=len(dataset.filtered_gene_list), out_size=dataset.num_classes).to(device)
 else:
     raise NotImplementedError
 
@@ -310,11 +162,11 @@ if mode == "test":
         # Obtain test metrics for each epoch in all groups
         print('                                         ')
         print("Obtaining train metrics:")
-        train_metrics = test(train_loader, model, device, metric, num_classes=classes_number)
+        train_metrics = test(train_loader, model, device, metric, num_classes=dataset.num_classes)
 
         print('                                         ')
         print("Obtaining test metrics:")
-        test_metrics = test(val_loader, model, device, metric, num_classes=classes_number)
+        test_metrics = test(val_loader, model, device, metric, num_classes=dataset.num_classes)
 
         # Handle if adversarial testing is required
         if test_adversarial:
@@ -325,7 +177,7 @@ if mode == "test":
                                     optimizer=optimizer, adversarial=True,
                                     attack=apgd_graph, criterion=criterion,
                                     epsilon=test_eps, n_iter=50,
-                                    num_classes=classes_number)
+                                    num_classes=dataset.num_classes)
 
         # If adversarial testing is not required adversarial test metrics are the same normal metrics
         else:
@@ -371,15 +223,17 @@ if mode == "test":
         plot_conf_matrix(train_metrics["conf_matrix"],
                          test_metrics["conf_matrix"],
                          adv_test_metrics["conf_matrix"],
+                         dataset.lab_txt_2_lab_num,
                          conf_matrix_fig_path)
-elif mode == "demo":
-    demo_saved_dict = torch.load("best_model.pt")
-    model_dict = demo_saved_dict['model_state_dict']
-    # Load state dicts to model and optimizer
-    model.load_state_dict(model_dict)
-    # Make demo loader with unit size of batch
-    demo_loader = DataLoader(val_graph_list, batch_size=1)
-    # Make demo plot
-    demo(demo_loader, model, device, num_test)
+# TODO: Handle demo mode correctly
+# elif mode == "demo":
+#     demo_saved_dict = torch.load("best_model.pt")
+#     model_dict = demo_saved_dict['model_state_dict']
+#     # Load state dicts to model and optimizer
+#     model.load_state_dict(model_dict)
+#     # Make demo loader with unit size of batch
+#     demo_loader = DataLoader(val_graph_list, batch_size=1)
+#     # Make demo plot
+#     demo(demo_loader, model, device, num_test)
 else:
     raise NotImplementedError

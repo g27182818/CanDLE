@@ -303,7 +303,7 @@ def print_epoch(train_dict, test_dict, adv_test_dict, loss, epoch, path):
     :param epoch: (int) Epoch number.
     :param path: (str) Training log path.
     """
-    rows = ["Train", "Test", "Adv_test"]
+    rows = ["Train", "Val", "Adv_Val"]
     data = np.zeros((3, 1))
     headers = []
     counter = 0
@@ -343,54 +343,17 @@ def print_epoch(train_dict, test_dict, adv_test_dict, loss, epoch, path):
         print('                                         ', file=f)
 
 
-def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, save_path):
+def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2_lab_num, save_path):
     """
     Plots a heatmap for all the important confusion matrices (train, test and adversarial test). All matrices enter as a
     numpy array.
     :param train_conf_mat: (numpy array) Training confusion matrix.
     :param test_conf_mat: (numpy array) Test confusion matrix.
     :param adv_test_conf_mat: (numpy array) Adversarial test confusion matrix.
+    :param lab_txt_2_lab_num: (dict) Dictionary that maps the label text to the label number for this dataset.
     :param save_path: (str) General path of the experiment results folder.
     """
-    if train_conf_mat.shape[0]==34:
-        # Define classes
-        classes = ["NT", "ACC", "BLCA", "BRCA", "CESC",
-               "CHOL", "COAD", "DLBC", "ESCA", "GBM",
-               "HNSC", "KICH", "KIRC", "KIRP", "LAML",
-               "LGG", "LIHC", "LUAD", "LUSC", "MESO",
-               "OV", "PAAD", "PCPG", "PRAD", "READ",
-               "SARC", "SKCM", "STAD", "TGCT", "THCA",
-               "THYM", "UCEC", "UCS", "UVM"]
-    elif train_conf_mat.shape[0]==63:
-        classes = ["ACC", "BLCA", "BRCA", "CESC",
-                "CHOL", "COAD", "DLBC", "ESCA", "GBM",
-                "HNSC", "KICH", "KIRC", "KIRP", "LAML",
-                "LGG", "LIHC", "LUAD", "LUSC", "MESO",
-                "OV", "PAAD", "PCPG", "PRAD", "READ",
-                "SARC", "SKCM", "STAD", "TGCT", "THCA",
-                "THYM", "UCEC", "UCS", "UVM",'Adipose Tissue', 
-                'Adrenal Gland', 'Bladder', 'Blood', 'Blood Vessel', 
-                'Brain', 'Breast', 'Cervix Uteri', 'Colon', 
-                'Esophagus', 'Fallopian Tube', 'Heart', 'Kidney', 
-                'Liver', 'Lung', 'Muscle', 'Nerve', 'Ovary', 
-                'Pancreas', 'Pituitary', 'Prostate', 'Salivary Gland', 
-                'Skin', 'Small Intestine', 'Spleen', 'Stomach', 
-                'Testis', 'Thyroid', 'Uterus', 'Vagina']
-    elif train_conf_mat.shape[0]==64:
-        classes = ["TCGA NT","ACC", "BLCA", "BRCA", "CESC",
-                "CHOL", "COAD", "DLBC", "ESCA", "GBM",
-                "HNSC", "KICH", "KIRC", "KIRP", "LAML",
-                "LGG", "LIHC", "LUAD", "LUSC", "MESO",
-                "OV", "PAAD", "PCPG", "PRAD", "READ",
-                "SARC", "SKCM", "STAD", "TGCT", "THCA",
-                "THYM", "UCEC", "UCS", "UVM",'Adipose Tissue', 
-                'Adrenal Gland', 'Bladder', 'Blood', 'Blood Vessel', 
-                'Brain', 'Breast', 'Cervix Uteri', 'Colon', 
-                'Esophagus', 'Fallopian Tube', 'Heart', 'Kidney', 
-                'Liver', 'Lung', 'Muscle', 'Nerve', 'Ovary', 
-                'Pancreas', 'Pituitary', 'Prostate', 'Salivary Gland', 
-                'Skin', 'Small Intestine', 'Spleen', 'Stomach', 
-                'Testis', 'Thyroid', 'Uterus', 'Vagina']
+    classes = sorted(list(lab_txt_2_lab_num.keys()))
 
     # Define dataframes
     df_train = pd.DataFrame(train_conf_mat, classes, classes)
@@ -505,46 +468,3 @@ def demo(loader, model, device, num_test):
             plt.savefig(save_path, dpi=200)
             break
 
-
-def fpkm2tpm(x, log2 = True, pre_log2 = True):
-    """This function takes an input matrix with rows being patients and columns being genes and returns
-    a transformed matrix with the same shape but with expression values transformed to TPM normalization.
-    The normalized expression vaues in the input matrix are in FPKM nomralization. 
-
-    Args:
-        x (np.array): Input matrix in FPKM normalization. Rows are samples and columns are genes.
-        log2 (bool, optional): Whether to perform a log2 transform after transforming to TPM. Defaults to True.
-        pre_log2 (bool, optional): True if input martix is log2 transformed. Defaults to True.
-
-    Returns:
-        x_t (np.array): Transformed version of input matrix x.
-    """
-
-    if pre_log2:
-        # Reverse log2 transform
-        x = np.exp2(x)-1
-    
-    # Put x in TPM normalization
-    x_t = 1e6 * x/np.sum(x, axis=0, keepdims=True)
-
-    if log2:
-        # Perform log2 normalization on x
-        x_t = np.log2(x_t+1)
-
-    return x_t
-
-
-def read_csv_pgbar(csv_path, chunksize, usecols, dtype=object):
-    # print('Getting row count of csv file')
-    rows = sum(1 for _ in open(csv_path, 'r')) - 1 # minus the header
-    # chunks = rows//chunksize + 1
-    # print('Reading csv file')
-    chunk_list = []
- 
-    with tqdm(total=rows, desc='Rows read: ') as bar:
-        for chunk in pd.read_csv(csv_path, chunksize=chunksize, usecols=usecols, dtype=dtype):
-            chunk_list.append(chunk)
-            bar.update(len(chunk))
- 
-    df = pd.concat((f for f in chunk_list), axis=0)
-    print('Finish reading csv file')

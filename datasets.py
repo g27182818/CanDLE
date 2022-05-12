@@ -49,6 +49,9 @@ class ToilDataset():
         # Compute correlation graph if use_graph is True
         self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
 
+        # Define number of classes for classification
+        self.num_classes = len(self.lab_txt_2_lab_num.keys())
+
     def read_toil_data(self):
         """
         Reads data from the Toil data set with root path and returns matrix_data, categories and phenotypes dataframes.
@@ -109,14 +112,14 @@ class ToilDataset():
             print("Using TCGA samples only")
             # Filter out all gtex samples from matrix_data
             matrix_data_filtered = matrix_data_filtered.iloc[:, ~matrix_data_filtered.columns.str.contains("GTEX")]
-            categories_filtered = self.categories[~self.categories["sample"].str.contains("GTEX")]
-            phenotypes_filtered = phenotypes_filtered[~self.phenotypes["sample"].str.contains("GTEX")]
+            categories_filtered = self.categories.loc[~self.categories.index.str.contains("GTEX"), :]
+            phenotypes_filtered = phenotypes_filtered.loc[~(phenotypes_filtered["_study"]=="GTEX"), :]
         elif ( not self.tcga) and self.gtex:
             print("Using GTEX samples only")
             # Filter out all tcga samples from matrix_data
             matrix_data_filtered = matrix_data_filtered.iloc[:, ~matrix_data_filtered.columns.str.contains("TCGA")]
-            categories_filtered = self.categories[~self.categories["sample"].str.contains("TCGA")]
-            phenotypes_filtered = phenotypes_filtered[~self.phenotypes["sample"].str.contains("TCGA")]
+            categories_filtered = self.categories.loc[~self.categories.index.str.contains("TCGA"), :]
+            phenotypes_filtered = phenotypes_filtered.loc[~(phenotypes_filtered["_study"]=="TCGA"), :]
         elif self.tcga and self.gtex:
             # Do nothing because both TCGA and GTEX samples are included
             print("Using TCGA and GTEX samples")
@@ -255,8 +258,22 @@ class ToilDataset():
             label_df["lab_txt"] = 0
             # Find sample names of normal (Healthy) TCGA subjects
             normal_tcga_samples = self.phenotypes_filtered[self.phenotypes_filtered["_sample_type"] == "Solid Tissue Normal"].index
-            # Put GTEX textual label in lab_txt column for normal (Healthy) TCGA samples
-            label_df.loc[normal_tcga_samples, "lab_txt"] = label_df.loc[normal_tcga_samples, "_primary_site"].map(normal_tcga_2_gtex)
+            
+            # Handle normal (Healthy) TCGA subjects
+            # If there are both TCGA and GTEX assign GTEX textual label to the normal (Healthy) TCGA subjects
+            if self.tcga and self.gtex:
+                # Put GTEX textual label in lab_txt column for normal (Healthy) TCGA samples
+                label_df.loc[normal_tcga_samples, "lab_txt"] = label_df.loc[normal_tcga_samples, "_primary_site"].map(normal_tcga_2_gtex)
+            # If there is only TCGA assign TCGA-NT label to the normal (Healthy) TCGA subjects
+            elif self.tcga and (not self.gtex):
+                # Put TCGA textual label in lab_txt column for normal (Healthy) TCGA samples
+                label_df.loc[normal_tcga_samples, "lab_txt"] = "TCGA-NT"
+            # If there is GTEX and not TCGA there is no need to handle normal (Healthy) TCGA subjects
+            elif self.gtex and (not self.tcga):
+                pass
+            # If there is neither TCGA nor GTEX raise an error
+            else:
+                raise ValueError("There is neither TCGA nor GTEX data available.")
 
             # Map phenotype detailed category to textual label in label_df for the non normal (Healthy) TCGA samples
             label_df.loc[label_df["lab_txt"] == 0, "lab_txt"] = label_df.loc[label_df["lab_txt"] == 0, "detailed_category"].map(pheno_2_lab_txt)
@@ -356,13 +373,13 @@ class ToilDataset():
     def get_dataloaders(self, batch_size):
         # Cast data as tensors
         # These data matrices have samples in rows and genes in columns
-        x_train = torch.Tensor(self.split_matrices["train"].T, dtype=torch.float)
-        x_val = torch.Tensor(self.split_matrices["val"].T, dtype=torch.float)
-        x_test = torch.Tensor(self.split_matrices["test"].T, dtype=torch.float)
+        x_train = torch.Tensor(self.split_matrices["train"].T.values).type(torch.float)
+        x_val = torch.Tensor(self.split_matrices["val"].T.values).type(torch.float)
+        x_test = torch.Tensor(self.split_matrices["test"].T.values).type(torch.float)
         # Cast labels as tensors
-        y_train = torch.Tensor(self.split_labels["train"].values, dtype=torch.long)
-        y_val = torch.Tensor(self.split_labels["val"].values, dtype=torch.long)
-        y_test = torch.Tensor(self.split_labels["test"].values, dtype=torch.long)
+        y_train = torch.Tensor(self.split_labels["train"].values).type(torch.long)
+        y_val = torch.Tensor(self.split_labels["val"].values).type(torch.long)
+        y_test = torch.Tensor(self.split_labels["test"].values).type(torch.long)
         # Define train graph list
         train_graph_list = [Data(x=torch.unsqueeze(x_train[i, :], 1),
                                  y=y_train[i],
@@ -389,15 +406,15 @@ class ToilDataset():
         return train_loader, val_loader, test_loader
         
 
-test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
-                                tcga = True,
-                                gtex = True,
-                                mean_thr = 3.0,
-                                std_thr = 0.5,
-                                use_graph = True,
-                                corr_thr = 0.6,
-                                p_thr = 0.05,
-                                label_type = 'phenotype',
-                                force_compute = True)
+# test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
+#                                 tcga = True,
+#                                 gtex = True,
+#                                 mean_thr = 3.0,
+#                                 std_thr = 0.5,
+#                                 use_graph = True,
+#                                 corr_thr = 0.6,
+#                                 p_thr = 0.05,
+#                                 label_type = 'phenotype',
+#                                 force_compute = True)
 
 
