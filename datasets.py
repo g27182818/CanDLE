@@ -19,15 +19,15 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class ToilDataset():
-    def __init__(self, path, tcga = True, gtex = True, mean_thr=0.5, std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
+    def __init__(self, path, dataset = 'both', mean_thr=0.5, std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
                 label_type = 'phenotype', force_compute = False):
         self.path = path
+        self.tcga = (dataset == 'tcga') or (dataset == 'both')
+        self.gtex = (dataset == 'gtex') or (dataset == 'both')
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
-                                              'tcga='+str(tcga)+'_gtex='+str(gtex),
+                                              'tcga='+str(self.tcga)+'_gtex='+str(self.gtex),
                                               'mean_thr='+str(mean_thr)+'_std_thr='+str(std_thr),
                                               'corr_thr='+str(corr_thr)+'_p_thr='+str(p_thr))
-        self.tcga = tcga
-        self.gtex = gtex
         self.mean_thr = mean_thr
         self.std_thr = std_thr
         self.use_graph = use_graph
@@ -51,6 +51,10 @@ class ToilDataset():
 
         # Define number of classes for classification
         self.num_classes = len(self.lab_txt_2_lab_num.keys())
+
+        # Make important plots with dataset characteristics
+        self.plot_label_distribution()
+        # self.plot_gene_expression_histograms(rand_size=100000)
 
     def read_toil_data(self):
         """
@@ -404,6 +408,104 @@ class ToilDataset():
         val_loader = DataLoader(val_graph_list, batch_size=batch_size, shuffle=True)
         test_loader = DataLoader(test_graph_list, batch_size=batch_size, shuffle=True)
         return train_loader, val_loader, test_loader
+    
+    # This function plots the label distribution of the dataset
+    def plot_label_distribution(self):
+        # Reverse salf.lab_txt_2_lab_num dictionary
+        lab_num_2_lab_txt = {v: k for k, v in self.lab_txt_2_lab_num.items()}
+
+        # Get label distribution
+        train_label_dist = self.split_labels["train"].value_counts()
+        val_label_dist = self.split_labels["val"].value_counts()
+        test_label_dist = self.split_labels["test"].value_counts()
+
+        # Give distribution textual label indexes
+        train_label_dist.index = train_label_dist.index.map(lab_num_2_lab_txt)
+        val_label_dist.index = val_label_dist.index.map(lab_num_2_lab_txt)
+        test_label_dist.index = test_label_dist.index.map(lab_num_2_lab_txt)
+        
+        # Handle different fig sizes for gtex and tcga
+        if self.gtex and self.tcga:
+            fig_size = (15, 15)
+        elif self.gtex and not self.tcga:
+            fig_size = (15, 7)
+        elif not self.gtex and self.tcga:
+            fig_size = (15, 7)
+        else:
+            raise ValueError("Either GTEx or TCGA must be True")
+
+
+        # Plot horizontal bar chart of label distribution
+        plt.figure(figsize=fig_size)
+        ax = plt.subplot(1, 3, 1)
+        train_label_dist.plot(kind="barh", color="blue", alpha=0.7)
+        plt.title("Train")
+        plt.xlabel("Label count")
+        plt.ylabel("Label")
+        plt.yticks(fontsize=8)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+
+        ax = plt.subplot(1, 3, 2)
+        val_label_dist.plot(kind="barh", color="green", alpha=0.7)
+        plt.title("Validation")
+        plt.xlabel("Label count")
+        plt.ylabel("Label")
+        plt.yticks(fontsize=8)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+
+        ax = plt.subplot(1, 3, 3)
+        test_label_dist.plot(kind="barh", color="red", alpha=0.7)
+        plt.title("Test")
+        plt.xlabel("Label count")
+        plt.ylabel("Label")
+        plt.yticks(fontsize=8)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+
+        plt.tight_layout()
+
+        plt.show()
+        plt.savefig(os.path.join(self.dataset_info_path, "label_distribution.png"), dpi=300)
+        plt.close()
+    
+    # This funtion makes histograms of the gene expression values for each dataset Gtex and TCGA
+    def plot_gene_expression_histograms(self, rand_size=10000):
+        # Get just GTEx  and just TCGA matrices
+        gtex_matrix = self.matrix_data.iloc[:, self.matrix_data.columns.str.contains("GTEX")]
+        tcga_matrix = self.matrix_data.iloc[:, self.matrix_data.columns.str.contains("TCGA")]
+
+        print("Started sampling gene expression values...")
+        np.random.seed(0)
+        start = time.time()
+        gtex_random_sample = np.random.choice(np.ravel(gtex_matrix.values), size=rand_size)
+        tcga_random_sample = np.random.choice(np.ravel(tcga_matrix.values), size=rand_size)
+        end = time.time()
+        print("Time to sample: {}".format(round(end - start, 3)))
+        plt.figure(figsize=(9, 7))
+        # Get gene expression histograms
+        plt.hist(gtex_random_sample, bins=100, color="blue", alpha=0.7, label="GTEx", log=True, density=True)
+        plt.hist(tcga_random_sample, bins=100, color="red", alpha=0.7, label="TCGA", log=True, density=True)
+        plt.grid()
+        plt.gca().set_axisbelow(True)
+        plt.xlabel("Gene Expression $[\log_2(TPM+0.001)]$", fontsize=18)
+        plt.ylabel("Density", fontsize=18)
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.title("Gene Expression Histograms ("+str(rand_size)+" samples)", fontsize=20)
+        plt.legend(["GTEx", "TCGA"], fontsize=14)
+        plt.tight_layout()
+        plt.show()
+        plt.savefig(os.path.join(self.dataset_info_path, "gene_expression_histograms.png"), dpi=300)
+        plt.close()
+
         
 
 # test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),

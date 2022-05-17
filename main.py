@@ -27,12 +27,13 @@ import argparse
 # Create the parser
 parser = argparse.ArgumentParser()
 # Add an argument
-parser.add_argument('--adv_e_test', type=float, default=0.01)
-parser.add_argument('--adv_e_train', type=float, default=0.00)
-parser.add_argument('--n_iters_apgd', type=int, default=50)
-parser.add_argument('--mode', type=str, default="test")
-parser.add_argument('--num_test', type=int, default=69)
-parser.add_argument('--train_samples', type=int, default=-1)
+parser.add_argument('--adv_e_test',     type=float, default=0.01)
+parser.add_argument('--adv_e_train',    type=float, default=0.00)
+parser.add_argument('--n_iters_apgd',   type=int,   default=50)
+parser.add_argument('--mode',           type=str,   default="test")
+parser.add_argument('--num_test',       type=int,   default=69)
+parser.add_argument('--train_samples',  type=int,   default=-1)
+parser.add_argument('--dataset',        type=str,   default="both",     help="Dataset to use", choices=["both", "tcga", "gtex"])
 # Parse the argument
 args = parser.parse_args()
 #############################################################
@@ -46,14 +47,15 @@ num_test = args.num_test            # Number of demo data to plot               
 # Dataset parameters --------------------------------------------------------------------------------------------------#
 val_fraction = 0.2                  # Fraction of the data used for validation                                         #
 train_smaples = args.train_samples  # Number of samples used for training the algorithm. -1 to run with all data.      #
+dataset = "both"                    # Dataset to use can be "both", "tcga" or "gtex"                                   #
 batch_size = 100                    # Batch size parameter                                                             #
 coor_thr = 0.6                      # Spearman correlation threshold for declaring graph topology                      #
 p_value_thr = 0.05                  # P-value Spearman correlation threshold for declaring graph topology              #
 # Model parameters ----------------------------------------------------------------------------------------------------#
 hidd = 8                            # Hidden channels parameter for baseline model                                     #
-model_type = "MLP_ALL"              # Model type, can be "MLP_FIL", "MLP_ALL", "BASELINE"                              #
+model_type = "BASELINE"             # Model type, can be "MLP_FIL", "MLP_ALL", "BASELINE"                              #
 # Training parameters -------------------------------------------------------------------------------------------------#
-experiment_name = "test_toil_just_gtex"       # Experiment name to define path were results are stored                           #
+experiment_name = "graph_just_gtex" # Experiment name to define path were results are stored                           #
 lr = 0.00001                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
 total_epochs = 20                   # Total number of epochs to train                                                  #
 metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
@@ -81,8 +83,7 @@ else:
 
 
 dataset = ToilDataset(os.path.join("data", "toil_data"),
-                            tcga = False,
-                            gtex = True,
+                            dataset = dataset,
                             mean_thr = mean_thr,
                             std_thr = std_thr,
                             use_graph = use_graph,
