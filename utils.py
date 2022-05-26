@@ -146,7 +146,14 @@ def test(loader, model, device, metric, optimizer=None, adversarial=False, attac
 
     if (metric == 'mAP') or (metric == 'both'):
         # Get binary GT matrix
-        binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
+        # Handle a binary problem because sklearn.preprocessing.label_binarize gives a matrix with only one column and two are needed
+        if num_classes == 2:
+            binary_gt = np.zeros((glob_true.shape[0], 2))
+            binary_gt[np.arange(glob_true.shape[0]), glob_true] = 1
+            # Cast binary_gt to int
+            binary_gt = binary_gt.astype(int)
+        else:
+            binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
         AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
         mean_AP = np.mean(AP_list)
 

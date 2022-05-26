@@ -263,6 +263,7 @@ with open(os.path.join("data", "toil_data", "mappers", "category_mapper.json"), 
 with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"), 'w') as f:
     json.dump(id_2_tissue_mapper, f, indent=4)
 
+
 # # Save label mapper to file
 # with open(os.path.join("data", "toil_data", "mappers", "lab_txt_2_lab_num_mapper.json"), 'w') as f:
 #     json.dump(label_mapper, f, indent=4)

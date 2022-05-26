@@ -19,22 +19,27 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class ToilDataset():
-    def __init__(self, path, dataset = 'both', mean_thr=0.5, std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
-                label_type = 'phenotype', force_compute = False):
+    def __init__(self, path, dataset = 'both', tissue='all', mean_thr=0.5, std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
+                label_type = 'phenotype', partition_seed=0, force_compute = False):
         self.path = path
+        self.tissue = tissue
         self.tcga = (dataset == 'tcga') or (dataset == 'both')
         self.gtex = (dataset == 'gtex') or (dataset == 'both')
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
-                                              'tcga='+str(self.tcga)+'_gtex='+str(self.gtex),
+                                              'dataset='+str(dataset),
                                               'mean_thr='+str(mean_thr)+'_std_thr='+str(std_thr),
-                                              'corr_thr='+str(corr_thr)+'_p_thr='+str(p_thr))
+                                              'corr_thr='+str(corr_thr)+'_p_thr='+str(p_thr), 
+                                              'tissue='+str(self.tissue))
         self.mean_thr = mean_thr
         self.std_thr = std_thr
         self.use_graph = use_graph
         self.corr_thr = corr_thr
         self.p_thr = p_thr
         self.label_type = label_type # can be 'phenotype' or 'category'
+        self.partition_seed = partition_seed # seed for train/val/test split
         self.force_compute = force_compute
+
+        # Main Bioinformatic pipeline
 
         # Read data from the Toil data set
         self.matrix_data, self.categories, self.phenotypes = self.read_toil_data()
@@ -42,9 +47,11 @@ class ToilDataset():
         self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
         # Filter genes based on mean and std
         self.filtered_gene_list, self.filtering_info, self.gene_filtered_data_matrix = self.filter_genes()
-        # Get labels and label dictionary
+        # Get labels and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
-        # Split data into train, validation and test sets
+        # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
+        self.filter_by_tissue()
+        # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
         self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
         # Compute correlation graph if use_graph is True
         self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
@@ -141,25 +148,33 @@ class ToilDataset():
             print("Computing mean, std and list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
             # Make directory if it does not exist
             os.makedirs(self.dataset_info_path, exist_ok = True)
-            # TODO: Remove the need to always compute the mean and std
-            # Compute the mean and standard deviation of the matrix_data
-            tqdm.pandas(desc="Computing Mean expression")
-            mean_data = self.matrix_data.progress_apply(np.mean, axis = 1)
-            tqdm.pandas(desc="Computing Standard Deviation of expression")
-            std_data = self.matrix_data.progress_apply(np.std, axis = 1)
+            # Compute the mean and standard deviation of the matrix_data if they do not exist
+            if (not os.path.exists(os.path.join(self.path, "mean_expression.csv"))) or (not os.path.exists(os.path.join(self.path, "std_expression.csv"))) or self.force_compute:
+                tqdm.pandas(desc="Computing Mean expression")
+                mean_data = self.matrix_data.progress_apply(np.mean, axis = 1).to_frame(name='mean')
+                tqdm.pandas(desc="Computing Standard Deviation of expression")
+                std_data = self.matrix_data.progress_apply(np.std, axis = 1).to_frame(name='std')
+                
+                # Save the mean and std to a csv file
+                mean_data.to_csv(os.path.join(self.path, "mean_expression.csv"))
+                std_data.to_csv(os.path.join(self.path, "std_expression.csv"))
+            # Load the mean and std from csv files if they exist
+            else:
+                mean_data = pd.read_csv(os.path.join(self.path, "mean_expression.csv"), index_col = 0)
+                std_data = pd.read_csv(os.path.join(self.path, "std_expression.csv"), index_col = 0)
             
             # Find the indices of the samples with mean and standard deviation that fulfill the thresholds
             mean_data_index = mean_data > self.mean_thr
             std_data_index = std_data > self.std_thr
             # Compute intersection of mean_data_index and std_data_index
-            mean_std_index = np.logical_and(mean_data_index.values, std_data_index.values)
+            mean_std_index = np.logical_and(mean_data_index.values, std_data_index.values).ravel()
             # Make a gene list of the samples that fulfill the thresholds
             gene_list = self.matrix_data.index[mean_std_index]
             # Compute boolean value for each gene that indicates if it was included in the filtered gene list
             included_in_filtering = mean_data.index.isin(gene_list)
 
             # Merge the mean, std and included_in_filtering into a final dataframe
-            filtering_info_df = pd.DataFrame({"mean": mean_data, "std": std_data, "included": included_in_filtering})
+            filtering_info_df = pd.DataFrame({"mean": mean_data['mean'], "std": std_data['std'], "included": included_in_filtering})
             filtering_info_df.index.name = "gene"
 
             # Save the gene list, mean and standard deviation of the matrix_data to files
@@ -228,7 +243,6 @@ class ToilDataset():
 
     # This function extracts the labels from categories_filtered or phenotypes_filtered and returns a list of labels and a dictionary of categories to labels
     def find_labels(self):
-        
         # Load mapper dict from normal TCGA samples to GTEX category
         with open(os.path.join(self.path, "mappers", "normal_tcga_2_gtex_mapper.json"), "r") as f:
             normal_tcga_2_gtex = json.load(f)
@@ -295,10 +309,34 @@ class ToilDataset():
             json.dump(lab_txt_2_lab_num, f, indent = 4)
         return label_df, lab_txt_2_lab_num
     
+    # This function modifies self.label_df and self.lab_txt_2_lab_num filtering by the specified tissue in self.tissue
+    def filter_by_tissue(self):
+        # If tissue is not specified, do not filter
+        if self.tissue == 'all':
+            return
+        # If tissue is specified, filter label_df and lab_txt_2_lab_num
+        else:
+            # Load id_2_tissue mapper from file
+            with open(os.path.join(self.path, "mappers", "id_2_tissue_mapper.json"), "r") as f:
+                id_2_tissue_mapper = json.load(f)
+            # Handle tha case where tissue is not in mapper
+            if self.tissue not in id_2_tissue_mapper.values():
+                raise ValueError("Tissue {} is not in the tissue mapper.".format(self.tissue))
+            # Define new column in label_df with tissue labels
+            self.label_df["tissue"] = self.label_df["lab_txt"].map(id_2_tissue_mapper)
+            # Filter label_df by tissue
+            self.label_df = self.label_df[self.label_df["tissue"] == self.tissue]
+            # Re define current labels
+            current_labels = sorted(self.label_df["lab_txt"].unique().tolist())
+            # Re compute lab_txt_2_lab_num dictionary
+            self.lab_txt_2_lab_num = {lab_txt: i for i, lab_txt in enumerate(current_labels)}
+            # Define numeric labels from the textual labels in self.label_df
+            self.label_df["lab_num"] = self.label_df["lab_txt"].map(self.lab_txt_2_lab_num)
+
     # This function uses self.label_df to split the data into train, validation and test sets
     def split_data(self):
-        train_val_lab, test_lab = train_test_split(self.label_df["lab_num"], test_size = 0.2, random_state = 0, stratify = self.label_df["lab_num"].values)
-        train_lab, val_lab = train_test_split(train_val_lab, test_size = 0.25, random_state = 0, stratify = train_val_lab.values)
+        train_val_lab, test_lab = train_test_split(self.label_df["lab_num"], test_size = 0.2, random_state = self.partition_seed, stratify = self.label_df["lab_num"].values)
+        train_lab, val_lab = train_test_split(train_val_lab, test_size = 0.25, random_state = self.partition_seed, stratify = train_val_lab.values)
         # Use label indexes to subset the data in self.matrix_data_filtered
         train_matrix = self.gene_filtered_data_matrix[train_lab.index]
         val_matrix = self.gene_filtered_data_matrix[val_lab.index]
@@ -311,6 +349,7 @@ class ToilDataset():
         # Both matrixes and labels are already shuffled
         return split_labels, split_matrices
     
+    # TODO: Graph connectivity is beeing computed after all filtering is done (including tissue filtering). This is not ideal.
     # This function computes a spearman correlation graph between all the genes in the train and val sets
     def compute_graph(self):
         
@@ -509,14 +548,17 @@ class ToilDataset():
         
 
 # test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
-#                                 tcga = True,
-#                                 gtex = True,
-#                                 mean_thr = 3.0,
-#                                 std_thr = 0.5,
-#                                 use_graph = True,
-#                                 corr_thr = 0.6,
-#                                 p_thr = 0.05,
+#                                 dataset = 'both', 
+#                                 tissue='Uterus', 
+#                                 mean_thr=0.5, 
+#                                 std_thr=0.5, 
+#                                 use_graph=True, 
+#                                 corr_thr=0.6, 
+#                                 p_thr=0.05,
 #                                 label_type = 'phenotype',
-#                                 force_compute = True)
+#                                 partition_seed=0,
+#                                 force_compute = False)
+
+# breakpoint()
 
 

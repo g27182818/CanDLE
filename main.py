@@ -1,16 +1,8 @@
 # Import of needed packages
 import numpy as np
-from sklearn.model_selection import train_test_split
-import time
-import scipy.io as sio
 import os
-import sys
 import torch
 import pickle
-from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
-import tqdm
-import pandas as pd
 # Import auxiliary functions
 from utils import *
 from model import *
@@ -33,7 +25,13 @@ parser.add_argument('--n_iters_apgd',   type=int,   default=50)
 parser.add_argument('--mode',           type=str,   default="test")
 parser.add_argument('--num_test',       type=int,   default=69)
 parser.add_argument('--train_samples',  type=int,   default=-1)
-parser.add_argument('--dataset',        type=str,   default="both",     help="Dataset to use", choices=["both", "tcga", "gtex"])
+parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                      choices=["both", "tcga", "gtex"])
+parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                             choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
+parser.add_argument('--model',          type=str,   default="MLP_ALL",      help="Model to use. Baseline is a graph neural network",    choices=["MLP_ALL", "MLP_FIL", "BASELINE"])
+parser.add_argument('--lr',             type=float, default=0.00001,        help="Learning rate")
+parser.add_argument('--batch_size',     type=int,   default=100,            help="Batch size")
+parser.add_argument('--n_epochs',       type=int,   default=20,             help="Number of epochs")
+parser.add_argument('--exp_name',       type=str,   default='misc_test',    help="EXperiment name to save")
 # Parse the argument
 args = parser.parse_args()
 #############################################################
@@ -47,17 +45,18 @@ num_test = args.num_test            # Number of demo data to plot               
 # Dataset parameters --------------------------------------------------------------------------------------------------#
 val_fraction = 0.2                  # Fraction of the data used for validation                                         #
 train_smaples = args.train_samples  # Number of samples used for training the algorithm. -1 to run with all data.      #
-dataset = "both"                    # Dataset to use can be "both", "tcga" or "gtex"                                   #
-batch_size = 100                    # Batch size parameter                                                             #
+dataset = args.dataset              # Dataset to use can be "both", "tcga" or "gtex"                                   #
+tissue = args.tissue                # Tissue to use from data. "all" to use all tissues                                #
+batch_size = args.batch_size        # Batch size parameter                                                             #
 coor_thr = 0.6                      # Spearman correlation threshold for declaring graph topology                      #
 p_value_thr = 0.05                  # P-value Spearman correlation threshold for declaring graph topology              #
 # Model parameters ----------------------------------------------------------------------------------------------------#
 hidd = 8                            # Hidden channels parameter for baseline model                                     #
-model_type = "BASELINE"             # Model type, can be "MLP_FIL", "MLP_ALL", "BASELINE"                              #
+model_type = args.model             # Model type, can be "MLP_FIL", "MLP_ALL", "BASELINE"                              #
 # Training parameters -------------------------------------------------------------------------------------------------#
-experiment_name = "graph_just_gtex" # Experiment name to define path were results are stored                           #
-lr = 0.00001                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
-total_epochs = 20                   # Total number of epochs to train                                                  #
+experiment_name = args.exp_name     # Experiment name to define path were results are stored                           #
+lr = args.lr                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
+total_epochs = args.n_epochs        # Total number of epochs to train                                                  #
 metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
 train_eps = args.adv_e_train        # Adversarial epsilon for train                                                    #
 n_iters_apgd = args.n_iters_apgd    # Number of performed APGD iterations in train                                     #
@@ -84,12 +83,14 @@ else:
 
 dataset = ToilDataset(os.path.join("data", "toil_data"),
                             dataset = dataset,
+                            tissue = tissue,
                             mean_thr = mean_thr,
                             std_thr = std_thr,
                             use_graph = use_graph,
                             corr_thr = coor_thr,
                             p_thr = p_value_thr,
                             label_type = 'phenotype',
+                            partition_seed = 0,
                             force_compute = False)
 
 # Dataloader declaration
