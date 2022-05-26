@@ -154,7 +154,7 @@ phenotype_mapper = {'Adipose - Subcutaneous':                       'GTEX-ADI',
                     'Uterine Corpus Endometrioid Carcinoma':        'TCGA-UCEC',
                     'Uveal Melanoma':                               'TCGA-UVM'
                     }
-# There are a total of 93/738 problematic categories
+# There are a total of 93/738 problematic samples
 normal_tcga_mapper = {  'Bile duct':            'GTEX-LIV',     # Problematic 9 samples
                         'Bladder':              'GTEX-BLA',
                         'Breast':               'GTEX-BRE',
@@ -177,6 +177,71 @@ normal_tcga_mapper = {  'Bile duct':            'GTEX-LIV',     # Problematic 9 
                         'Thyroid Gland':        'GTEX-THY'
                         }
 
+# Define a mapper from identifiers to tissue specific models
+id_2_tissue_mapper = {  'GTEX-ADI':             'Connective', # Model for connective tissue to compare with sarcoma
+                        'GTEX-ADR_GLA':         'Kidney', 
+                        'GTEX-BLA':             'Bladder',
+                        'GTEX-BLO':             'Blood',
+                        'GTEX-BLO_VSL':         'Blood',
+                        'GTEX-BRA':             'Brain',
+                        'GTEX-BRE':             'Breast',
+                        'GTEX-CER':             'Cervix',
+                        'GTEX-COL':             'Colon',
+                        'GTEX-ESO':             'Esophagus',
+                        'GTEX-FAL_TUB':         'Not Paired', # Fallopian tube
+                        'GTEX-HEA':             'Not Paired', # Heart
+                        'GTEX-KID':             'Kidney',
+                        'GTEX-LIV':             'Liver',
+                        'GTEX-LUN':             'Lung',
+                        'GTEX-MUS':             'Connective',
+                        'GTEX-NER':             'Not Paired', # Nerve
+                        'GTEX-OVA':             'Ovary',
+                        'GTEX-PAN':             'Pancreas',
+                        'GTEX-PIT':             'Brain',
+                        'GTEX-PRO':             'Prostate',
+                        'GTEX-SAL_GLA':         'Not Paired', # Salivary gland
+                        'GTEX-SKI':             'Skin',
+                        'GTEX-SMA_INT':         'Not Paired', # Small intestine
+                        'GTEX-SPL':             'Not Paired', # Spleen
+                        'GTEX-STO':             'Stomach',
+                        'GTEX-TES':             'Testis',
+                        'GTEX-THY':             'Thyroid',
+                        'GTEX-UTE':             'Uterus',
+                        'GTEX-VAG':             'Not Paired', # Vagina
+                        'TCGA-LAML':            'Blood',
+                        'TCGA-ACC':             'Kidney',
+                        'TCGA-BLCA':            'Bladder',
+                        'TCGA-LGG':             'Brain',
+                        'TCGA-BRCA':            'Breast',
+                        'TCGA-CESC':            'Cervix',
+                        'TCGA-CHOL':            'Liver',
+                        'TCGA-COAD':            'Colon',
+                        'TCGA-DLBC':            'Not Paired', # Difuse large B-cell lymphoma is from the linphatic system but assigned to blood
+                        'TCGA-ESCA':            'Esophagus',
+                        'TCGA-GBM':             'Brain',
+                        'TCGA-HNSC':            'Not Paired', # Head and neck squamous cell carcinoma
+                        'TCGA-KICH':            'Kidney',
+                        'TCGA-KIRC':            'Kidney',
+                        'TCGA-KIRP':            'Kidney',
+                        'TCGA-LIHC':            'Liver',
+                        'TCGA-LUAD':            'Lung',
+                        'TCGA-LUSC':            'Lung',
+                        'TCGA-MESO':            'Lung',
+                        'TCGA-OV':              'Ovary',
+                        'TCGA-PAAD':            'Pancreas',
+                        'TCGA-PCPG':            'Kidney',
+                        'TCGA-PRAD':            'Prostate',
+                        'TCGA-READ':            'Colon',
+                        'TCGA-SARC':            'Connective',
+                        'TCGA-SKCM':            'Skin',
+                        'TCGA-STAD':            'Stomach',
+                        'TCGA-TGCT':            'Testis',
+                        'TCGA-THYM':            'Not Paired', # Thymoma
+                        'TCGA-THCA':            'Thyroid',
+                        'TCGA-UCS':             'Uterus',
+                        'TCGA-UCEC':            'Uterus',
+                        'TCGA-UVM':             'Not Paired'} # Uveal melanoma
+
 # # Define a label mapper for all the values in category mapper
 # sorted_labels = sorted(category_mapper.values())
 # label_mapper = {value: i for i, value in enumerate(sorted_labels)}
@@ -194,6 +259,10 @@ with open(os.path.join("data", "toil_data", "mappers", "phenotype_mapper.json"),
 # Save category mapper to file
 with open(os.path.join("data", "toil_data", "mappers", "category_mapper.json"), 'w') as f:
     json.dump(category_mapper, f, indent=4)
+# Save id_2_tissue_mapper to file
+with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"), 'w') as f:
+    json.dump(id_2_tissue_mapper, f, indent=4)
+
 # # Save label mapper to file
 # with open(os.path.join("data", "toil_data", "mappers", "lab_txt_2_lab_num_mapper.json"), 'w') as f:
 #     json.dump(label_mapper, f, indent=4)
