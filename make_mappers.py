@@ -264,6 +264,18 @@ with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"
     json.dump(id_2_tissue_mapper, f, indent=4)
 
 
+# # Reverse id_2_tissue_mapper
+# tissue_2_id_mapper = {}
+# for key, value in id_2_tissue_mapper.items():
+#     if value not in tissue_2_id_mapper:
+#         tissue_2_id_mapper[value] = [key]
+#     else:
+#         tissue_2_id_mapper[value].append(key)
+
+# # Print tissue_2_id_mapper to terminal
+# for key, value in tissue_2_id_mapper.items(): 
+#     print(key,': ', value)
+
 # # Save label mapper to file
 # with open(os.path.join("data", "toil_data", "mappers", "lab_txt_2_lab_num_mapper.json"), 'w') as f:
 #     json.dump(label_mapper, f, indent=4)

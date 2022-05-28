@@ -6,7 +6,6 @@ import time
 import json
 import torch
 import networkx as nx
-import pickle as pkl
 from sklearn.model_selection import train_test_split
 from scipy.stats import spearmanr
 from scipy.sparse import coo_matrix
@@ -154,7 +153,7 @@ class ToilDataset():
                 mean_data = self.matrix_data.progress_apply(np.mean, axis = 1).to_frame(name='mean')
                 tqdm.pandas(desc="Computing Standard Deviation of expression")
                 std_data = self.matrix_data.progress_apply(np.std, axis = 1).to_frame(name='std')
-                
+
                 # Save the mean and std to a csv file
                 mean_data.to_csv(os.path.join(self.path, "mean_expression.csv"))
                 std_data.to_csv(os.path.join(self.path, "std_expression.csv"))
@@ -313,6 +312,8 @@ class ToilDataset():
     def filter_by_tissue(self):
         # If tissue is not specified, do not filter
         if self.tissue == 'all':
+            print("Filtered by {} tissue".format(self.tissue))
+            print("Number of samples after filtering by tissue: {}".format(len(self.label_df)))
             return
         # If tissue is specified, filter label_df and lab_txt_2_lab_num
         else:
@@ -332,6 +333,9 @@ class ToilDataset():
             self.lab_txt_2_lab_num = {lab_txt: i for i, lab_txt in enumerate(current_labels)}
             # Define numeric labels from the textual labels in self.label_df
             self.label_df["lab_num"] = self.label_df["lab_txt"].map(self.lab_txt_2_lab_num)
+        
+        print("Filtered by {} tissue".format(self.tissue))
+        print("Number of samples after filtering by tissue: {}".format(len(self.label_df)))
 
     # This function uses self.label_df to split the data into train, validation and test sets
     def split_data(self):
@@ -549,7 +553,7 @@ class ToilDataset():
 
 # test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
 #                                 dataset = 'both', 
-#                                 tissue='Uterus', 
+#                                 tissue='all', 
 #                                 mean_thr=0.5, 
 #                                 std_thr=0.5, 
 #                                 use_graph=True, 

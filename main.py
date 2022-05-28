@@ -70,12 +70,12 @@ if model_type == "MLP_FIL":
     std_thr = 0.5   # Standard deviation threshold for filtering input genes
     use_graph = False
 elif model_type == "BASELINE":
-    mean_thr = 3.0  # Mean threshold for filtering input genes
-    std_thr = 0.5   # Standard deviation threshold for filtering input genes
+    mean_thr = 3.0  
+    std_thr = 0.5   
     use_graph = True
 elif model_type == "MLP_ALL":
-    mean_thr = -10.0  # Mean threshold for filtering input genes
-    std_thr = -1.0    # Standard deviation threshold for filtering input genes
+    mean_thr = -10.0  
+    std_thr = -1.0    
     use_graph = False
 else:
     raise NotImplementedError

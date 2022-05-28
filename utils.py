@@ -154,6 +154,7 @@ def test(loader, model, device, metric, optimizer=None, adversarial=False, attac
             binary_gt = binary_gt.astype(int)
         else:
             binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
+        # TODO: Check if this mAP compute is correct: mAP is getting to 1 without mACC beeing 1
         AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
         mean_AP = np.mean(AP_list)
 
