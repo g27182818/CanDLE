@@ -361,7 +361,14 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2
     :param lab_txt_2_lab_num: (dict) Dictionary that maps the label text to the label number for this dataset.
     :param save_path: (str) General path of the experiment results folder.
     """
-    classes = sorted(list(lab_txt_2_lab_num.keys()))
+
+    # Handle binary problem when ploting confusion matrix
+    if (len(set(lab_txt_2_lab_num.values())) == 2) and (len(lab_txt_2_lab_num.keys()) > 2):
+        binary_problem = True
+        classes = [0, 1]
+    else:
+        binary_problem = False
+        classes = sorted(list(lab_txt_2_lab_num.keys()))
 
     # Define dataframes
     df_train = pd.DataFrame(train_conf_mat, classes, classes)
@@ -369,7 +376,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2
     df_adv_test = pd.DataFrame(adv_test_conf_mat, classes, classes)
 
     # Plot params
-    scale = 1.5
+    scale = 1.5 if binary_problem==False else 3.0
     fig_size = (50, 30)
     tit_size = 40
     lab_size = 30

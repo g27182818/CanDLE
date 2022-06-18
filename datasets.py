@@ -18,10 +18,12 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class ToilDataset():
-    def __init__(self, path, dataset = 'both', tissue='all', mean_thr=0.5, std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
+    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
+                std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
                 label_type = 'phenotype', partition_seed=0, force_compute = False):
         self.path = path
         self.tissue = tissue
+        self.binary_dict = binary_dict
         self.tcga = (dataset == 'tcga') or (dataset == 'both')
         self.gtex = (dataset == 'gtex') or (dataset == 'both')
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
@@ -50,13 +52,15 @@ class ToilDataset():
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
         # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
         self.filter_by_tissue()
+        # Make the problem binary in case self.binary_dict is not empty
+        self.make_binary_problem() # If self.binary_dict == {} this function does nothing
         # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
         self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
         # Compute correlation graph if use_graph is True
         self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
 
         # Define number of classes for classification
-        self.num_classes = len(self.lab_txt_2_lab_num.keys())
+        self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
 
         # Make important plots with dataset characteristics
         self.plot_label_distribution()
@@ -312,7 +316,7 @@ class ToilDataset():
     def filter_by_tissue(self):
         # If tissue is not specified, do not filter
         if self.tissue == 'all':
-            print("Filtered by {} tissue".format(self.tissue))
+            print("No Filtering by tissue using all samples.")
             print("Number of samples after filtering by tissue: {}".format(len(self.label_df)))
             return
         # If tissue is specified, filter label_df and lab_txt_2_lab_num
@@ -336,6 +340,21 @@ class ToilDataset():
         
         print("Filtered by {} tissue".format(self.tissue))
         print("Number of samples after filtering by tissue: {}".format(len(self.label_df)))
+
+    # This function uses self.binary_dict to modify self.label_df and self.lab_txt_2_lab_num to make the labels binary
+    def make_binary_problem(self):
+        # If binary_dict is not specified, do not make binary
+        if self.binary_dict == {}:
+            print("No binary problem specified.")
+            return
+        # If binary_dict is specified, make binary
+        else:
+            self.lab_txt_2_lab_num = self.binary_dict
+            # Define numeric labels from the textual labels in self.label_df
+            self.label_df["lab_num"] = self.label_df["lab_txt"].map(self.lab_txt_2_lab_num)   
+            print("Made binary problem.")
+            print("Number of class 0: {}, number of class 1: {}".format(len(self.label_df[self.label_df["lab_num"] == 0]), len(self.label_df[self.label_df["lab_num"] == 1])))
+            return
 
     # This function uses self.label_df to split the data into train, validation and test sets
     def split_data(self):
