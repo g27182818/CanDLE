@@ -153,6 +153,8 @@ metrics_log_path = os.path.join(results_path, "metric_dicts.pickle")
 train_performance_fig_path = os.path.join(results_path, "training_performance.png")
 # Declare path to save final confusion matrices
 conf_matrix_fig_path = os.path.join(results_path, "confusion_matrix")
+# Declare path to save pr curves for binary classification
+pr_curves_fig_path = os.path.join(results_path, "pr_curves.png")
 
 # Create results directory
 if not os.path.isdir(results_path):
@@ -233,6 +235,11 @@ if mode == "test":
     # Generate training performance plot and save it to train_performance_fig_path
     plot_training(metric, train_metric_lst, test_metric_lst, adv_test_metric_lst, loss_list, train_performance_fig_path)
 
+    # Plot PR curve if the problem is binary
+    if dataset.num_classes == 2:
+        plot_pr_curve(train_metrics["pr_curve"], test_metrics["pr_curve"], adv_test_metrics["pr_curve"],
+                      pr_curves_fig_path)
+                      
     # Generate confusion matrices plot and save it to conf_matrix_fig_path
     if (metric == 'acc') or (metric == 'both'):
         plot_conf_matrix(train_metrics["conf_matrix"],

@@ -152,6 +152,9 @@ def test(loader, model, device, metric, optimizer=None, adversarial=False, attac
             binary_gt[np.arange(glob_true.shape[0]), glob_true] = 1
             # Cast binary_gt to int
             binary_gt = binary_gt.astype(int)
+            # If the problem is binary the PR curve is obtained for the positive class
+            precision, recall, thresholds = sklearn.metrics.precision_recall_curve(glob_true, glob_prob[:, 1])
+            metric_result["pr_curve"] = precision, recall, thresholds
         else:
             binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
         # TODO: Check if this mAP compute is correct: mAP is getting to 1 without mACC beeing 1
@@ -230,6 +233,59 @@ def apgd_graph(model, x, y, edge_index, batch, criterion, epsilon=0.01, **kwargs
     delta = torch.reshape(delta, (-1, 1))
     return delta.detach()
 
+
+
+def print_epoch(train_dict, test_dict, adv_test_dict, loss, epoch, path):
+    """
+    This function prints in terminal a table with all available metrics in all test groups (train, test, adversarial
+    test) for an specific epoch. It also write this table to the training log specified in path.
+    :param train_dict: (Dict) Dictionary containing the train set metrics acording to the test() function.
+    :param test_dict: (Dict) Dictionary containing the test set metrics acording to the test() function.
+    :param adv_test_dict: (Dict) Dictionary containing the adversarial test set metrics acording to the test() function.
+    :param loss: (float) Mean epoch loss value.
+    :param epoch: (int) Epoch number.
+    :param path: (str) Training log path.
+    """
+    rows = ["Train", "Val", "Adv_Val"]
+    data = np.zeros((3, 1))
+    headers = []
+    counter = 0
+
+    # Construccion of the metrics table
+    for k in train_dict.keys():
+        # Handle metrics that cannot be printed
+        if (k == "conf_matrix") or (k == "AP_list") or (k == "epoch") or (k == "pr_curve"):
+            continue
+        headers.append(k)
+
+        if counter > 0:
+            data = np.hstack((data, np.zeros((3, 1))))
+
+        data[0, counter] = train_dict[k]
+        data[1, counter] = test_dict[k]
+        data[2, counter] = adv_test_dict[k]
+        counter += 1
+
+    # Print metrics to console
+    print('-----------------------------------------')
+    print('                                         ')
+    print("Epoch "+str(epoch+1)+":")
+    print("Loss = " + str(loss.cpu().detach().numpy()))
+    print('                                         ')
+    data_frame = pd.DataFrame(data, index=rows, columns=headers)
+    print(data_frame)
+    print('                                         ')
+    # Save metrics to a training log
+    with open(path, 'a') as f:
+        print('-----------------------------------------', file=f)
+        print('                                         ', file=f)
+        print("Epoch " + str(epoch + 1) + ":", file=f)
+        print("Loss = " + str(loss.cpu().detach().numpy()), file=f)
+        print('                                         ', file=f)
+        print(data_frame, file=f)
+        print('                                         ', file=f)
+
+
 def plot_training(metric, train_list, test_list, adversarial_test_list, loss, save_path):
     """
     This function plots a 2X1 figure. The left figure has the training performance in train, test, and adversarial test
@@ -299,56 +355,6 @@ def plot_training(metric, train_list, test_list, adversarial_test_list, loss, sa
     plt.title("Model Loss", fontsize=25)
 
     plt.savefig(save_path, dpi=200)
-
-def print_epoch(train_dict, test_dict, adv_test_dict, loss, epoch, path):
-    """
-    This function prints in terminal a table with all available metrics in all test groups (train, test, adversarial
-    test) for an specific epoch. It also write this table to the training log specified in path.
-    :param train_dict: (Dict) Dictionary containing the train set metrics acording to the test() function.
-    :param test_dict: (Dict) Dictionary containing the test set metrics acording to the test() function.
-    :param adv_test_dict: (Dict) Dictionary containing the adversarial test set metrics acording to the test() function.
-    :param loss: (float) Mean epoch loss value.
-    :param epoch: (int) Epoch number.
-    :param path: (str) Training log path.
-    """
-    rows = ["Train", "Val", "Adv_Val"]
-    data = np.zeros((3, 1))
-    headers = []
-    counter = 0
-
-    # Construccion of the metrics table
-    for k in train_dict.keys():
-        # Handle metrics that cannot be printed
-        if (k == "conf_matrix") or (k == "AP_list") or (k == "epoch"):
-            continue
-        headers.append(k)
-
-        if counter > 0:
-            data = np.hstack((data, np.zeros((3, 1))))
-
-        data[0, counter] = train_dict[k]
-        data[1, counter] = test_dict[k]
-        data[2, counter] = adv_test_dict[k]
-        counter += 1
-
-    # Print metrics to console
-    print('-----------------------------------------')
-    print('                                         ')
-    print("Epoch "+str(epoch+1)+":")
-    print("Loss = " + str(loss.cpu().detach().numpy()))
-    print('                                         ')
-    data_frame = pd.DataFrame(data, index=rows, columns=headers)
-    print(data_frame)
-    print('                                         ')
-    # Save metrics to a training log
-    with open(path, 'a') as f:
-        print('-----------------------------------------', file=f)
-        print('                                         ', file=f)
-        print("Epoch " + str(epoch + 1) + ":", file=f)
-        print("Loss = " + str(loss.cpu().detach().numpy()), file=f)
-        print('                                         ', file=f)
-        print(data_frame, file=f)
-        print('                                         ', file=f)
 
 
 def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2_lab_num, save_path):
@@ -432,6 +438,29 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2
     plt.tight_layout()
     plt.savefig(save_path + "_adv_test.png", dpi=200)
     plt.close()
+
+def plot_pr_curve(pr_curve_train, pr_curve_val, pr_curve_adv_val, save_path):
+    precision = {'train': pr_curve_train[0], 'val': pr_curve_val[0], 'adv_val': pr_curve_adv_val[0]}
+    recall = {'train': pr_curve_train[1], 'val': pr_curve_val[1], 'adv_val': pr_curve_adv_val[1]}
+    threshold = {'train': pr_curve_train[2], 'val': pr_curve_val[2], 'adv_val': pr_curve_adv_val[2]}
+
+    plt.figure(figsize=(11, 10))
+    plt.plot(recall['train'], precision['train'], color='darkorange', lw=2, label='Train')
+    plt.plot(recall['adv_val'], precision['adv_val'], color='cornflowerblue', lw=2, label='Adv. Val')
+    plt.plot(recall['val'], precision['val'], color='navy', lw=2, label='Val')
+    plt.xlabel('Recall', fontsize=20)
+    plt.ylabel('Precision', fontsize=20)
+    plt.ylim([0.0, 1])
+    plt.xlim([0.0, 1])
+    plt.title('Precision-Recall Curve', fontsize=25)
+    plt.legend(fontsize=18)
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=200)
+    plt.close()
+
+
+
 
 
 def demo(loader, model, device, num_test):

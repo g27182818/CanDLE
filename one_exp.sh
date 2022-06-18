@@ -4,7 +4,7 @@ GPU=0
 # Dataset parameters #####################################
 DATASET=both
 TISSUE=all
-ALL_VS_ONE=TCGA-BRCA
+ALL_VS_ONE=TCGA-READ
 # Graph parameters ########################################
 # Model parameters ########################################
 MODEL=MLP_ALL
