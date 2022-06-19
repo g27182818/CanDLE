@@ -152,9 +152,11 @@ def test(loader, model, device, metric, optimizer=None, adversarial=False, attac
             binary_gt[np.arange(glob_true.shape[0]), glob_true] = 1
             # Cast binary_gt to int
             binary_gt = binary_gt.astype(int)
-            # If the problem is binary the PR curve is obtained for the positive class
+            # If the problem is binary the PR curve and max f1 are obtained for the positive class
             precision, recall, thresholds = sklearn.metrics.precision_recall_curve(glob_true, glob_prob[:, 1])
             metric_result["pr_curve"] = precision, recall, thresholds
+            # Compute max F1 score
+            metric_result["max_f1"] = np.max(2 * (precision * recall) / (precision + recall))
         else:
             binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
         # TODO: Check if this mAP compute is correct: mAP is getting to 1 without mACC beeing 1
@@ -419,7 +421,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(labelsize=lab_size)
     plt.tight_layout()
-    plt.savefig(save_path + "_test.png", dpi=200)
+    plt.savefig(save_path + "_val.png", dpi=200)
     plt.close()
 
     # Plot confusion matrix for adversarial test
@@ -436,7 +438,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(labelsize=lab_size)
     plt.tight_layout()
-    plt.savefig(save_path + "_adv_test.png", dpi=200)
+    plt.savefig(save_path + "_adv_val.png", dpi=200)
     plt.close()
 
 def plot_pr_curve(pr_curve_train, pr_curve_val, pr_curve_adv_val, save_path):
@@ -445,17 +447,26 @@ def plot_pr_curve(pr_curve_train, pr_curve_val, pr_curve_adv_val, save_path):
     threshold = {'train': pr_curve_train[2], 'val': pr_curve_val[2], 'adv_val': pr_curve_adv_val[2]}
 
     plt.figure(figsize=(11, 10))
+
+    f_scores = np.linspace(0.1, 0.9, num=9)
+    for f_score in f_scores:
+        x = np.linspace(0.01, 1.01, 499)
+        y = f_score * x / (2 * x - f_score)
+        (l,) = plt.plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
+        plt.annotate("$f_1={0:0.1f}$".format(f_score), xy=(0.9, y[450] + 0.02))
+
     plt.plot(recall['train'], precision['train'], color='darkorange', lw=2, label='Train')
     plt.plot(recall['adv_val'], precision['adv_val'], color='cornflowerblue', lw=2, label='Adv. Val')
     plt.plot(recall['val'], precision['val'], color='navy', lw=2, label='Val')
-    plt.xlabel('Recall', fontsize=20)
-    plt.ylabel('Precision', fontsize=20)
-    plt.ylim([0.0, 1])
-    plt.xlim([0.0, 1])
-    plt.title('Precision-Recall Curve', fontsize=25)
+    plt.xlabel('Recall', fontsize=24)
+    plt.ylabel('Precision', fontsize=24)
+    plt.ylim([0.0, 1.01])
+    plt.xlim([0.0, 1.01])
+    plt.title('Precision-Recall Curve', fontsize=28)
     plt.legend(fontsize=18)
     plt.grid()
     plt.tight_layout()
+    plt.tick_params(labelsize=15)
     plt.savefig(save_path, dpi=200)
     plt.close()
 

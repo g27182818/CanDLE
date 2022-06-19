@@ -27,7 +27,7 @@ parser.add_argument('--model',          type=str,   default="MLP_ALL",      help
 
 parser.add_argument('--lr',             type=float, default=0.00001,        help="Learning rate")
 parser.add_argument('--batch_size',     type=int,   default=100,            help="Batch size")
-parser.add_argument('--epochs',       type=int,   default=20,             help="Number of epochs")
+parser.add_argument('--epochs',         type=int,   default=20,             help="Number of epochs")
 parser.add_argument('--adv_e_test',     type=float, default=0.01)
 parser.add_argument('--adv_e_train',    type=float, default=0.00)
 parser.add_argument('--n_iters_apgd',   type=int,   default=50)
@@ -60,7 +60,7 @@ model_type = args.model             # Model type, can be "MLP_FIL", "MLP_ALL", "
 # Training parameters -------------------------------------------------------------------------------------------------#
 experiment_name = args.exp_name     # Experiment name to define path were results are stored                           #
 lr = args.lr                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
-total_epochs = args.epochs        # Total number of epochs to train                                                  #
+total_epochs = args.epochs          # Total number of epochs to train                                                  #
 metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
 train_eps = args.adv_e_train        # Adversarial epsilon for train                                                    #
 n_iters_apgd = args.n_iters_apgd    # Number of performed APGD iterations in train                                     #
@@ -137,8 +137,8 @@ test_adversarial = train_eps > 0.0 # TODO: In this moment if there is not arvers
 
 # Lists declarations
 train_metric_lst = []
-test_metric_lst = []
-adv_test_metric_lst = []
+val_metric_lst = []
+adv_val_metric_lst = []
 loss_list = []
 
 # Declare results path
@@ -182,15 +182,15 @@ if mode == "test":
         train_metrics = test(train_loader, model, device, metric, num_classes=dataset.num_classes)
 
         print('                                         ')
-        print("Obtaining test metrics:")
-        test_metrics = test(val_loader, model, device, metric, num_classes=dataset.num_classes)
+        print("Obtaining val metrics:")
+        val_metrics = test(val_loader, model, device, metric, num_classes=dataset.num_classes)
 
         # Handle if adversarial testing is required
         if test_adversarial:
             print('                                         ')
-            print("Obtaining adversarial test metrics:")
+            print("Obtaining adversarial val metrics:")
             # This test is set to use 50 iterations of APGD
-            adv_test_metrics = test(val_loader, model, device, metric,
+            adv_val_metrics = test(val_loader, model, device, metric,
                                     optimizer=optimizer, adversarial=True,
                                     attack=apgd_graph, criterion=criterion,
                                     epsilon=test_eps, n_iter=50,
@@ -198,21 +198,21 @@ if mode == "test":
 
         # If adversarial testing is not required adversarial test metrics are the same normal metrics
         else:
-            adv_test_metrics = test_metrics
+            adv_val_metrics = val_metrics
 
         # Add epoch information to the dictionaries
         train_metrics["epoch"] = epoch
-        test_metrics["epoch"] = epoch
-        adv_test_metrics["epoch"] = epoch
+        val_metrics["epoch"] = epoch
+        adv_val_metrics["epoch"] = epoch
 
         # Append data to list
         train_metric_lst.append(train_metrics)
-        test_metric_lst.append(test_metrics)
-        adv_test_metric_lst.append(adv_test_metrics)
+        val_metric_lst.append(val_metrics)
+        adv_val_metric_lst.append(adv_val_metrics)
         loss_list.append(loss.cpu().detach().numpy())
 
         # Print performance
-        print_epoch(train_metrics, test_metrics, adv_test_metrics, loss, epoch, train_log_path)
+        print_epoch(train_metrics, val_metrics, adv_val_metrics, loss, epoch, train_log_path)
 
         # Save checkpoints every 2 epochs
         if (epoch+1) % 2 == 0:
@@ -225,26 +225,26 @@ if mode == "test":
 
     # Save metrics dicts
     complete_metric_dict = {"train": train_metric_lst,
-                            "test": test_metric_lst,
-                            "adv_test": adv_test_metric_lst,
+                            "val": val_metric_lst,
+                            "adv_val": adv_val_metric_lst,
                             "loss": loss_list}
 
     with open(metrics_log_path, 'wb') as f:
         pickle.dump(complete_metric_dict, f)
 
     # Generate training performance plot and save it to train_performance_fig_path
-    plot_training(metric, train_metric_lst, test_metric_lst, adv_test_metric_lst, loss_list, train_performance_fig_path)
+    plot_training(metric, train_metric_lst, val_metric_lst, adv_val_metric_lst, loss_list, train_performance_fig_path)
 
     # Plot PR curve if the problem is binary
     if dataset.num_classes == 2:
-        plot_pr_curve(train_metrics["pr_curve"], test_metrics["pr_curve"], adv_test_metrics["pr_curve"],
+        plot_pr_curve(train_metrics["pr_curve"], val_metrics["pr_curve"], adv_val_metrics["pr_curve"],
                       pr_curves_fig_path)
                       
     # Generate confusion matrices plot and save it to conf_matrix_fig_path
     if (metric == 'acc') or (metric == 'both'):
         plot_conf_matrix(train_metrics["conf_matrix"],
-                         test_metrics["conf_matrix"],
-                         adv_test_metrics["conf_matrix"],
+                         val_metrics["conf_matrix"],
+                         adv_val_metrics["conf_matrix"],
                          dataset.lab_txt_2_lab_num,
                          conf_matrix_fig_path)
 # TODO: Handle demo mode correctly

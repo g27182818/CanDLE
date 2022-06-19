@@ -4,7 +4,7 @@ GPU=0
 # Dataset parameters #####################################
 DATASET=both
 TISSUE=all
-ALL_VS_ONE=TCGA-READ
+ALL_VS_ONE=TCGA-OV
 # Graph parameters ########################################
 # Model parameters ########################################
 MODEL=MLP_ALL
