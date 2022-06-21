@@ -66,7 +66,6 @@ category_mapper = {'GTEX Adipose Tissue':                       'GTEX-ADI',
                    'TCGA Uveal Melanoma':                       'TCGA-UVM'
                    }
 
-breakpoint()
 
 phenotype_mapper = {'Adipose - Subcutaneous':                       'GTEX-ADI', 
                     'Adipose - Visceral (Omentum)':                 'GTEX-ADI',
