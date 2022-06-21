@@ -22,7 +22,7 @@ xe_query <- XenaQuery(xe)
 
 # Download data
 cat("Downloading data...\n")
-xe_download <- XenaDownload(xe_query, destdir = file.path("data", "toil_download"), max_try = 10L)
+xe_download <- XenaDownload(xe_query, destdir = file.path("data", "toil_download"))
 # Load data into R
 cat("Loading data into R and un...\n")
 dat <- XenaPrepare(xe_download, chunk_size = 100)
