@@ -5,10 +5,17 @@ import numpy as np
 import json
 import pickle as pkl
 import matplotlib
+from adjustText import adjust_text
 
-mode = 'compute' # 'compute' or 'plot'
+mode = 'plot' # 'compute' or 'plot'
 dataset = 'both' # 'tcga', 'gtex' or 'both'
 gpu = '2'
+use_weights = True # True or False
+
+if use_weights:
+    exp_folder_name = 'all_vs_one_exp'
+else:
+    exp_folder_name = 'all_vs_one_exp_no_weights'
 
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
@@ -31,12 +38,10 @@ else:
     raise ValueError('dataset must be either "tcga", "gtex" or "both"')
 
 
-# # Temporal test sumsample
-# labels = labels[:21]
+# Declare folder names for all experiments
+exp_names = [os.path.join(exp_folder_name, dataset, label) for label in labels]
 
-# Make dir for results
-exp_names = [os.path.join('all_vs_one_exp', dataset, label) for label in labels]
-
+# If mode is 'compute', compute all experiments
 if mode == 'compute':
     for i in range(len(labels)):
         # run main.py with subprocess
@@ -44,18 +49,28 @@ if mode == 'compute':
         print(command)
         command = command.split()
         subprocess.call(command)
-elif mode == 'plot' or mode == 'compute':
+
+# Plot results
+if mode == 'plot' or mode == 'compute':
     metric_paths = [os.path.join('Results', exp_name, 'metric_dicts.pickle') for exp_name in exp_names]
     # Load metric dicts
     metric_dicts = [pkl.load(open(metric_path, 'rb')) for metric_path in metric_paths]
 
     pr_curve_list = []
     n_list = []
+    AP_list = []
+    f1_list = []
     for metric_dict in metric_dicts:
-        # Get pr curve
+        # Get val pr curve
         val_metrics = metric_dict['val'][-1]
         pr_curve = val_metrics['pr_curve']
         pr_curve_list.append(pr_curve)
+        # Get val AP
+        val_AP = val_metrics['AP_list'][1]
+        AP_list.append(val_AP)
+        # Get val max F1 score
+        val_max_F1 = val_metrics['max_f1']
+        f1_list.append(val_max_F1)
         # Get sample number of training set
         train_metrics = metric_dict['train'][-1]
         conf_matrix_train = train_metrics['conf_matrix']
@@ -64,36 +79,96 @@ elif mode == 'plot' or mode == 'compute':
 
     # Handle colors to plot
     n_vec = np.array(n_list)
-    # color_vec = (n_vec-np.min(n_vec)) / (np.max(n_vec)-np.min(n_vec))
     normalization = matplotlib.colors.LogNorm(vmin=np.min(n_vec), vmax=np.max(n_vec))
     color_vec = normalization(n_vec)
     color_matrix = plt.cm.magma(color_vec)
     
 
-    plt.figure(figsize=(13,10))
+    plt.figure(figsize=(22,10))
+    plt.subplot(121)
+    plt.plot(n_list, AP_list, 'ok')
+    plt.xlim([0, 1.01*max(n_list)])
+    plt.ylim([0.5, 1.01])
+    plt.xlabel('Train Samples', fontsize=24)
+    plt.ylabel('$AP$', fontsize=24)
+    plt.title('Average Precision Vs Training Samples', fontsize=28)
+    plt.tick_params(labelsize=15)
+    plt.grid()
+    plt.subplot(122)
+    plt.plot(n_list, f1_list, 'ok')
+    plt.xlim([0, 1.01*max(n_list)])
+    plt.ylim([0.5, 1.01])
+    plt.xlabel('Train Samples', fontsize=24)
+    plt.ylabel('Max $F_1$', fontsize=24)
+    plt.title('Max $F_1$ Vs Training Samples', fontsize=28)
+    plt.tick_params(labelsize=15)
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+    plt.savefig(os.path.join('Results',exp_folder_name, dataset,'f1_ap_vs_samples.png'), dpi=200)
+    plt.close()
+
+
+    f, ax = plt.subplots(1, 2, gridspec_kw={'width_ratios': [0.87, 1]}, figsize=(23,10))
     f_scores = np.linspace(0.1, 0.9, num=9)
     for f_score in f_scores:
         x = np.linspace(0.01, 1.01, 499)
         y = f_score * x / (2 * x - f_score)
-        (l,) = plt.plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
+        ax[0].plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
     for i in range(len(pr_curve_list)):
         pr_curve = pr_curve_list[i]
-        plt.plot(pr_curve[1], pr_curve[0], color=color_matrix[i])
-    plt.xlabel('Recall', fontsize=24)
-    plt.ylabel('Precision', fontsize=24)
-    plt.ylim([0.0, 1.01])
-    plt.xlim([0.0, 1.01])
-    plt.title('Precision-Recall Curve', fontsize=28)
+        ax[0].plot(pr_curve[1], pr_curve[0], color=color_matrix[i])
+    
+    # This was a try to annotate PR curves
+    # num=-25
+    # texts = []
+    # for i in range(len(pr_curve_list)):
+    #     act_pr_curve = pr_curve_list[i]
+    #     if (AP_list[i]<0.9 and f1_list[i]<0.9):
+    #         texts.append(ax[0].text(act_pr_curve[1][num], act_pr_curve[0][num], labels[i], ha='left', va='bottom'))
+    #         print(act_pr_curve[1][num], act_pr_curve[0][num], labels[i], len(act_pr_curve[1]))
+
+    # [text.set_fontsize(13) for text in texts]
+    
+    ax[0].set_xlabel('Recall', fontsize=24)
+    ax[0].set_ylabel('Precision', fontsize=24)
+    ax[0].set_ylim([0.0, 1.01])
+    ax[0].set_xlim([0.0, 1.01])
+    ax[0].set_title('Precision-Recall Curve', fontsize=28)
+    ax[0].grid(alpha=0.7)
+    ax[0].tick_params(labelsize=15)
+    plt.gca().set_axisbelow(True)
+
+    # Plot of max F1 vs AP
+    # plot max f1 vs ap. Set the size of the marker to be the size of the training set
+    ax[1].scatter(AP_list, f1_list, s=2*np.array(n_list), c=color_matrix, cmap='magma', norm=normalization, alpha=0.8)
+    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.9 or f1_list[i]<0.9)]
+    [text.set_fontsize(13) for text in texts]
+    adjust_text(texts)
+    plt.xlim([0.55, 1.02])
+    plt.ylim([0.55, 1.02])
+    plt.xlabel('$AP$', fontsize=24)
+    plt.ylabel('Max $F_1$', fontsize=24)
+    plt.title('Max $F_1$ Vs Average Precision', fontsize=28)
+    # Put box annotations on the plot
+    bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9)
+    ax[1].text(0.7, 0.975, "Average Max $F_1={}$\nAverage $AP={}$".format(round(np.mean(f1_list),3), round(np.mean(AP_list),3)), ha="center", va="center", size=20,
+            bbox=bbox_props)
+    plt.xticks(np.arange(0.55, 1.05, 0.05))
+    plt.yticks(np.arange(0.55, 1.05, 0.05))
+    plt.tick_params(labelsize=15)
+    plt.grid(alpha=0.7)
+    plt.gca().set_axisbelow(True)
     cbar = plt.colorbar(plt.cm.ScalarMappable(norm=normalization, cmap='magma'))
     cbar.ax.tick_params(labelsize=15)
     cbar.set_label('Train Samples', fontsize=24)
-    plt.grid()
-    plt.tight_layout()
-    plt.tick_params(labelsize=15)
-    plt.savefig(os.path.join('all_vs_one_exp', dataset,'joint_pr_curve.png'), dpi=200)
+    plt.tight_layout(w_pad=3)
+    plt.show()
+    plt.savefig(os.path.join('Results',exp_folder_name, dataset,'pr_curves_summary.png'), dpi=400)
     plt.close()
 
-else:
-    raise ValueError('mode must be either "compute" or "plot"')
+
+
+
 
 

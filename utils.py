@@ -156,7 +156,7 @@ def test(loader, model, device, metric, optimizer=None, adversarial=False, attac
             precision, recall, thresholds = sklearn.metrics.precision_recall_curve(glob_true, glob_prob[:, 1])
             metric_result["pr_curve"] = precision, recall, thresholds
             # Compute max F1 score
-            metric_result["max_f1"] = np.max(2 * (precision * recall) / (precision + recall))
+            metric_result["max_f1"] = np.nanmax(2 * (precision * recall) / (precision + recall))
         else:
             binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
         # TODO: Check if this mAP compute is correct: mAP is getting to 1 without mACC beeing 1
@@ -412,7 +412,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2
     sn.set(font_scale=scale)
     ax = sn.heatmap(df_test, annot=True, linewidths=.5, fmt='g', cmap=plt.get_cmap(cm_str),
                     linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
-    plt.title("Test \nConfusion matrix", fontsize=tit_size)
+    plt.title("Validation\nConfusion matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
     ax.tick_params(labelsize=lab_size)
@@ -429,7 +429,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, adv_test_conf_mat, lab_txt_2
     sn.set(font_scale=scale)
     ax = sn.heatmap(df_adv_test, annot=True, linewidths=.5, fmt='g', cmap=plt.get_cmap(cm_str),
                     linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
-    plt.title("Adversarial test \nConfusion matrix", fontsize=tit_size)
+    plt.title("Adversarial validation \nConfusion matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
     ax.tick_params(labelsize=lab_size)

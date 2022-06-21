@@ -129,7 +129,8 @@ print(model)
 
 # Define optimizer and criterion
 optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999))
-criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
+# criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
+criterion = torch.nn.CrossEntropyLoss() # Temporal experiment without weights
 
 # Decide whether to train and test adversarially or not
 train_adversarial = train_eps > 0.0
@@ -142,6 +143,7 @@ adv_val_metric_lst = []
 loss_list = []
 
 # Declare results path
+# TODO: Make function that returns all the paths
 # results_path = os.path.join("Results", "MULTINOMIAL_LOGISTIC_ALL_DATA", "ADVERSARIAL_APGD_"+str(int(100*adv_e_train))+"%")
 # results_path = os.path.join("Results", "TRAIN_SAMPLES_SWEEP", experiment_name)
 results_path = os.path.join("Results", experiment_name)
