@@ -52,12 +52,18 @@ To install all requiered dependencies run each line sequentially:
 conda create --name candle
 conda activate candle
 conda install -y pytorch=1.9.0 torchvision cudatoolkit=10.2 python=3.7 -c pytorch
-conda install pyg -c pyg
+conda install pyg -c pyg # Pytorch Geometric
 pip install matplotlib
 pip install seaborn
 pip install pyarrow
 pip install adjustText
 ```
+Note:
+* If you are running from Windows and have trouble installing pytorch geometric you can install pytorch alternatively with:
+```
+conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+```
+
 To finalize the setup run the `make mappers.py` file to save important files to create `ToilDataset` objects:
 
 ```

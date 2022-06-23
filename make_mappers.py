@@ -243,6 +243,25 @@ id_2_tissue_mapper = {  'GTEX-ADI':             'Connective', # Model for connec
                         'TCGA-UCEC':            'Uterus',
                         'TCGA-UVM':             'Not Paired'} # Uveal melanoma
 
+wang_normal_tcga_mapper = { 'blca': 'bladder',
+                            'brca': 'breast',
+                            'cesc': 'cervix',
+                            'coad': 'colon',
+                            'esca': 'esophagus',
+                            'hnsc': 'salivary',
+                            'kich': 'kidney',
+                            'kirc': 'kidney',
+                            'kirp': 'kidney',
+                            'lihc': 'liver',
+                            'luad': 'lung',
+                            'lusc': 'lung',
+                            'prad': 'prostate',
+                            'read': 'colon',
+                            'stad': 'stomach',
+                            'thca': 'thyroid',
+                            'ucec': 'uterus',
+                            'ucs':  'uterus'}
+
 # # Define a label mapper for all the values in category mapper
 # sorted_labels = sorted(category_mapper.values())
 # label_mapper = {value: i for i, value in enumerate(sorted_labels)}
@@ -250,6 +269,10 @@ id_2_tissue_mapper = {  'GTEX-ADI':             'Connective', # Model for connec
 # Create mapper directory if there is not one
 if not os.path.exists(os.path.join("data", "toil_data", "mappers")):
     os.makedirs(os.path.join("data", "toil_data", "mappers"))
+
+if not os.path.exists(os.path.join("data", "wang_data", "mappers")):
+    os.makedirs(os.path.join("data", "wang_data", "mappers"))
+
 
 # Save normal_tcga_mapper mappers to file
 with open(os.path.join("data", "toil_data", "mappers", "normal_tcga_2_gtex_mapper.json"), 'w') as f:
@@ -263,6 +286,11 @@ with open(os.path.join("data", "toil_data", "mappers", "category_mapper.json"), 
 # Save id_2_tissue_mapper to file
 with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"), 'w') as f:
     json.dump(id_2_tissue_mapper, f, indent=4)
+
+
+# Save normal_tcga_mapper mappers to file
+with open(os.path.join("data", "wang_data", "mappers", "normal_tcga_2_gtex_mapper.json"), 'w') as f:
+    json.dump(wang_normal_tcga_mapper, f, indent=4)
 
 
 # # Reverse id_2_tissue_mapper

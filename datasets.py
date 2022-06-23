@@ -1,3 +1,4 @@
+from ast import Raise
 import tqdm
 import pandas as pd
 import numpy as np
@@ -5,6 +6,9 @@ import os
 import time
 import json
 import torch
+import zipfile
+import gzip
+import shutil
 import networkx as nx
 from sklearn.model_selection import train_test_split
 from scipy.stats import spearmanr
@@ -43,7 +47,7 @@ class ToilDataset():
         # Main Bioinformatic pipeline
 
         # Read data from the Toil data set
-        self.matrix_data, self.categories, self.phenotypes = self.read_toil_data()
+        self.matrix_data, self.categories, self.phenotypes = self.read_data()
         # Filter toil datasets to use GTEx, TCGA or both
         self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
         # Filter genes based on mean and std
@@ -66,7 +70,7 @@ class ToilDataset():
         self.plot_label_distribution()
         # self.plot_gene_expression_histograms(rand_size=100000)
 
-    def read_toil_data(self):
+    def read_data(self):
         """
         Reads data from the Toil data set with root path and returns matrix_data, categories and phenotypes dataframes.
 
@@ -101,9 +105,9 @@ class ToilDataset():
         Filters the Toil data set by using or not using TCGA and GTEx samples.
 
         Args:
-            matrix_data (pd.dataframe): Dataframe of the complete Toil data set obtained from read_toil_data().
-            categories (pd.dataframe): Dataframe of categories of the complete Toil data set obtained from read_toil_data().
-            phenotypes (pd.dataframe): Dataframe of phenotypes of the complete Toil data set obtained from read_toil_data().
+            matrix_data (pd.dataframe): Dataframe of the complete Toil data set obtained from read_data().
+            categories (pd.dataframe): Dataframe of categories of the complete Toil data set obtained from read_data().
+            phenotypes (pd.dataframe): Dataframe of phenotypes of the complete Toil data set obtained from read_data().
             tcga (bool, optional): If True, TCGA samples are used. Defaults to True. 
             gtex (bool, optional): If True GTEX samples are used. Defaults to True.
 
@@ -570,6 +574,10 @@ class ToilDataset():
 
         
 
+
+
+
+
 # test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
 #                                 dataset = 'both', 
 #                                 tissue='all', 
@@ -584,4 +592,131 @@ class ToilDataset():
 
 # breakpoint()
 
+class WangDataset():
+    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
+                std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
+                partition_seed=0, force_compute = False):
 
+        self.path = path
+        self.tissue = tissue
+        self.binary_dict = binary_dict
+        self.tcga = (dataset == 'tcga') or (dataset == 'both')
+        self.gtex = (dataset == 'gtex') or (dataset == 'both')
+        self.dataset_info_path = os.path.join(self.path, 'processed_data',
+                                              'dataset='+str(dataset),
+                                              'mean_thr='+str(mean_thr)+'_std_thr='+str(std_thr),
+                                              'corr_thr='+str(corr_thr)+'_p_thr='+str(p_thr), 
+                                              'tissue='+str(self.tissue))
+        self.mean_thr = mean_thr
+        self.std_thr = std_thr
+        self.use_graph = use_graph
+        self.corr_thr = corr_thr
+        self.p_thr = p_thr
+        self.partition_seed = partition_seed # seed for train/val/test split
+        self.force_compute = force_compute
+
+        # Main Bioinformatic pipeline
+
+        # # Read data from the Toil data set
+        # self.matrix_data, self.categories, self.phenotypes = self.read_data()
+        # # Filter toil datasets to use GTEx, TCGA or both
+        # self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
+        # # Filter genes based on mean and std
+        # self.filtered_gene_list, self.filtering_info, self.gene_filtered_data_matrix = self.filter_genes()
+        # # Get labels and label dictionary. 
+        # self.label_df, self.lab_txt_2_lab_num = self.find_labels()
+        # # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
+        # self.filter_by_tissue()
+        # # Make the problem binary in case self.binary_dict is not empty
+        # self.make_binary_problem() # If self.binary_dict == {} this function does nothing
+        # # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
+        # self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
+        # # Compute correlation graph if use_graph is True
+        # self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
+
+        # # Define number of classes for classification
+        # self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
+
+        # # Make important plots with dataset characteristics
+        # self.plot_label_distribution()
+        # # self.plot_gene_expression_histograms(rand_size=100000)
+
+        self.unzip_data()
+        self.read_data()
+
+    # This function unzips the raw downloaded data from 
+    def unzip_data(self):
+        final_data_path = os.path.join(self.path, 'original_data')
+        # Do nothing if unziped folder already exists
+        if os.path.exists(final_data_path):
+            print('Files already unzipped...')
+            return
+        # Unzip data if original_data does not exist
+        else:
+            print('Unzipping files this may take some minutes...')
+            zipped_path = os.path.join(self.path, '5330593.zip')
+            unzipped_folder = os.path.join(self.path, '5330593_unzipped')
+            final_data_path = os.path.join(self.path, 'original_data')
+
+            with zipfile.ZipFile(zipped_path, 'r') as zip_ref:
+                zip_ref.extractall(unzipped_folder)
+            
+            classes_paths = os.listdir(unzipped_folder)
+            
+            # Make final directory
+            os.mkdir(final_data_path)
+            # Cycle to unzip original data
+            for i in tqdm(range(len(classes_paths))):
+                class_path = classes_paths[i]
+                final_file_name = class_path[:-3]
+                # Exclude chol category wich is said to be discarted in original paper but is in the downloaded data
+                if not(class_path[:4] == 'chol'):
+                    with gzip.open(os.path.join(unzipped_folder, class_path), 'rb') as f_in:
+                        with open(os.path.join(final_data_path, final_file_name), 'wb') as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+            
+            # Remove temporal folder
+            shutil.rmtree(unzipped_folder)
+    
+    # This helper function recieves the file name of a class and returns a valid textual label
+    def get_label_from_name(self, name):
+        str_list = name[:-4].split('-')
+        if len(str_list) == 5:
+            label = str_list[-2]+str_list[0]
+        elif len(str_list) == 4:
+            label = str_list[-1]+'-'+str_list[0]
+        else:
+            raise ValueError('The name of the original file is not adecuate.')
+        label = label.upper()
+
+        # TODO: Use a mapper to pass to standard classes
+        return label
+
+    # This function reads the data
+    def read_data(self):
+        data_path = os.path.join(self.path, 'original_data')
+        # Declare list of paths where each class is hosted
+        classes_paths = os.listdir(data_path)
+
+        for i in tqdm(range(len(classes_paths))):
+            class_file = classes_paths[i]
+            act_df = pd.read_table(os.path.join(data_path, class_file), delimiter='\t')
+            act_df = act_df.set_index('Hugo_Symbol')
+            del act_df['Entrez_Gene_Id']
+            act_category = self.get_label_from_name(class_file)
+
+            act_category_df = pd.DataFrame({'sample':act_df.columns(), 'lab_txt': act_category})
+            data_matrix = act_df if i==0 else pd.concat([data_matrix, act_df], axis=1)
+            category_df = act_category_df if i==0 else pd.concat([category_df, act_category_df], axis=0)
+
+        
+
+
+        
+
+
+            
+
+            
+
+# test_wang = WangDataset(os.path.join('data', 'wang_data'))
