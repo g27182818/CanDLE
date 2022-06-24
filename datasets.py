@@ -616,9 +616,10 @@ class WangDataset():
         self.force_compute = force_compute
 
         # Main Bioinformatic pipeline
-
-        # # Read data from the Toil data set
-        # self.matrix_data, self.categories, self.phenotypes = self.read_data()
+        # Uncompress data
+        self.unzip_data()
+        # Read data from the Toil data set
+        self.matrix_data, self.categories = self.read_data()
         # # Filter toil datasets to use GTEx, TCGA or both
         # self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
         # # Filter genes based on mean and std
@@ -641,8 +642,6 @@ class WangDataset():
         # self.plot_label_distribution()
         # # self.plot_gene_expression_histograms(rand_size=100000)
 
-        self.unzip_data()
-        self.read_data()
 
     # This function unzips the raw downloaded data from 
     def unzip_data(self):
@@ -671,6 +670,7 @@ class WangDataset():
                 final_file_name = class_path[:-3]
                 # Exclude chol category wich is said to be discarted in original paper but is in the downloaded data
                 if not(class_path[:4] == 'chol'):
+                #if True:
                     with gzip.open(os.path.join(unzipped_folder, class_path), 'rb') as f_in:
                         with open(os.path.join(final_data_path, final_file_name), 'wb') as f_out:
                             shutil.copyfileobj(f_in, f_out)
@@ -682,7 +682,7 @@ class WangDataset():
     def get_label_from_name(self, name):
         str_list = name[:-4].split('-')
         if len(str_list) == 5:
-            label = str_list[-2]+str_list[0]
+            label = str_list[-2]+'-'+str_list[-1]+'-'+str_list[0]
         elif len(str_list) == 4:
             label = str_list[-1]+'-'+str_list[0]
         else:
@@ -694,29 +694,56 @@ class WangDataset():
 
     # This function reads the data
     def read_data(self):
-        data_path = os.path.join(self.path, 'original_data')
-        # Declare list of paths where each class is hosted
-        classes_paths = os.listdir(data_path)
+        # If processed data directory does not exist read, merge and save complete data
+        if not os.path.exists(os.path.join(self.path, 'processed_data')):
+            data_path = os.path.join(self.path, 'original_data')
+            # Declare list of paths where each class is hosted
+            classes_paths = os.listdir(data_path)
 
-        for i in tqdm(range(len(classes_paths))):
-            class_file = classes_paths[i]
-            act_df = pd.read_table(os.path.join(data_path, class_file), delimiter='\t')
-            act_df = act_df.set_index('Hugo_Symbol')
-            del act_df['Entrez_Gene_Id']
-            act_category = self.get_label_from_name(class_file)
+            for i in tqdm(range(len(classes_paths))):
+                class_file = classes_paths[i] # Get file name
+                act_df = pd.read_table(os.path.join(data_path, class_file), delimiter='\t') # Read file
+                
+                # Perform minor modification in act_df
+                act_df = act_df.set_index('Hugo_Symbol') 
+                del act_df['Entrez_Gene_Id']
+                
+                # Filter out genes in act_df that are not in all classes 
+                valid_gene_index = act_df.index if i==0 else valid_gene_index.intersection(act_df.index)
+                act_df = act_df.loc[valid_gene_index, :]
 
-            act_category_df = pd.DataFrame({'sample':act_df.columns(), 'lab_txt': act_category})
-            data_matrix = act_df if i==0 else pd.concat([data_matrix, act_df], axis=1)
-            category_df = act_category_df if i==0 else pd.concat([category_df, act_category_df], axis=0)
+                act_category = self.get_label_from_name(class_file) # Get label names from file names
+                act_category_df = pd.DataFrame({'sample':act_df.columns, 'lab_txt': act_category})
+                
+                # Join iteratevily data matrices
+                data_matrix = act_df if i==0 else data_matrix.join(act_df)
+                data_matrix = data_matrix.loc[valid_gene_index, :] # Ensure datamatrix just has common genes in all classes
+                category_df = act_category_df if i==0 else pd.concat([category_df, act_category_df], axis=0) # Join category dataframes
+
+            # Put gene at the begining column and resetting index to save in feather
+            data_matrix.insert(loc=0, column='Gene_Hugo_Symbol', value=data_matrix.index)
+            data_matrix = data_matrix.reset_index()
+            # Add a binary column to category_df indicating if the samples is from the TCGA
+            category_df['is_tcga'] = category_df['lab_txt'].str.contains('TCGA')
+            category_df = category_df.reset_index() # Reset index
+
+            os.mkdir(os.path.join(self.path, 'processed_data'))
+            data_matrix.to_feather(os.path.join(self.path, 'processed_data', 'data_matrix.feather'))
+            category_df.to_csv(os.path.join(self.path, 'processed_data', 'data_category.csv'))
+        # If the data is already merged and stored load it from file
+        else:
+            start = time.time()
+            data_matrix = pd.read_feather(os.path.join(self.path, 'processed_data', 'data_matrix.feather'))
+            category_df = pd.read_csv(os.path.join(self.path, 'processed_data', 'data_category.csv'))
+            end = time.time()
+            del category_df['Unnamed: 0']
+            del category_df['index']
+            print('Time to read data: {} s'.format(round(end-start,2)))
+        
+        return data_matrix, category_df
 
         
 
-
-        
-
-
-            
-
-            
+    
 
 # test_wang = WangDataset(os.path.join('data', 'wang_data'))

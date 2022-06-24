@@ -103,12 +103,11 @@ data = dataset.split_matrices
 x_train = data['train'].T
 y_train = labels['train']
 
+x_val = data['val'].T
+y_val = labels['val']
 
 rf_model = RandomForestClassifier(n_estimators=100, verbose=2, random_state=0, n_jobs=-1)
 rf_model.fit(x_train, y_train)
-
-x_val = data['val'].T
-y_val = labels['val']
 
 # Get predictions
 y_pred = rf_model.predict(x_val)

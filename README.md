@@ -15,16 +15,21 @@ conda install -c r r-essentials
 conda install -c conda-forge r-base=4.1.0
 conda install -c conda-forge r-languageserver
 ```
-Open an R session to install needer packages:
+Open an R session to install needed packages:
 ```R
 R # This should open an R session
 install.packages("UCSCXenaTools") # Can take a few minutes
 install.packages('feather')
-quit() # This will end the R session
+quit() # This will end the R session you dont need to save workspace (n)
 ```
 Run the downloader:
 ```
 Rscript toil_downloader.R
+```
+
+Close the R enviroment:
+```
+conda deactivate
 ```
 
 ### Using R Studio:
@@ -42,16 +47,16 @@ The installed packages are:
 * ***feather*** ([Docs](https://cran.r-project.org/web/packages/feather/feather.pdf)): To store data in an efficient and fast format that can be read using pandas.
 
 Note:
-* There can be problems downloading the `TcgaTargetGtex_rsem_gene_tpm.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/data_matrix.feather` file should have a size of 8.52 Gb. If it does not have this size, it is recomended to download directly the file from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
+* There can be problems downloading the `TcgaTargetGtex_rsem_gene_tpm.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/data_matrix.feather` file should have a size of 8.62 Gb. If it does not have this size, it is recomended to download directly the file from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
 
 ## Download required python dependencies for CanDLE
 
 To install all requiered dependencies run each line sequentially:
 
 ```bash
-conda create --name candle
+conda create -n candle
 conda activate candle
-conda install -y pytorch=1.9.0 torchvision cudatoolkit=10.2 python=3.7 -c pytorch
+conda install pytorch torchvision cudatoolkit=10.2 python=3.9 -c pytorch
 conda install pyg -c pyg # Pytorch Geometric
 pip install matplotlib
 pip install seaborn
