@@ -18,6 +18,7 @@ dataset = ToilDataset(os.path.join("data", "toil_data"),
                             partition_seed = 0,
                             force_compute = False)
 
+
 # Transfer data to DataFrame
 labels = dataset.split_labels
 data = dataset.split_matrices

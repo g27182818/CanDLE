@@ -14,7 +14,8 @@ xe <- XenaHub(hostName = "toilHub",
              cohorts = "TCGA TARGET GTEx",
              datasets = c("TcgaTargetGTEX_phenotype.txt",
                           "TCGA_GTEX_category.txt",
-                          "TcgaTargetGtex_rsem_gene_tpm"))
+                          "TcgaTargetGtex_rsem_gene_tpm",
+                          "TcgaTargetGtex_gene_expected_count"))
 
 # Define the Xena query object
 xe_query <- XenaQuery(xe)
@@ -24,10 +25,11 @@ xe_query <- XenaQuery(xe)
 cat("Downloading data...\n")
 xe_download <- XenaDownload(xe_query, destdir = file.path("data", "toil_download"), max_try = 10L)
 # Load data into R
-cat("Loading data into R and un...\n")
+cat("Loading data into R...\n")
 dat <- XenaPrepare(xe_download, chunk_size = 100)
 
 data_matrix <- dat$TcgaTargetGtex_rsem_gene_tpm.gz
+count_matrix <- dat$TcgaTargetGtex_gene_expected_count.gz
 categories <- dat$TCGA_GTEX_category.txt
 phenotypes <- dat$TcgaTargetGTEX_phenotype.txt.gz
 
@@ -37,6 +39,7 @@ dir.create(file.path("data", "toil_data"), recursive = TRUE, showWarnings = FALS
 # Save data
 cat("Writing data to", file.path("data", "toil_data"), "directory\n")
 write_feather(data_matrix, file.path("data", "toil_data", "data_matrix.feather"))
+write_feather(count_matrix, file.path("data", "toil_data", "count_matrix.feather"))
 write.csv(categories, file.path("data", "toil_data", "categories.csv"))
 write.csv(phenotypes, file.path("data", "toil_data", "phenotypes.csv"))
 

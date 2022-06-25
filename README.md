@@ -18,6 +18,10 @@ conda install -c conda-forge r-languageserver
 Open an R session to install needed packages:
 ```R
 R # This should open an R session
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("sva") # Can take several minutes
+BiocManager::install("DESeq2") # Can take a few minutes
 install.packages("UCSCXenaTools") # Can take a few minutes
 install.packages('feather')
 quit() # This will end the R session you dont need to save workspace (n)
@@ -36,6 +40,10 @@ conda deactivate
 1. Open an up to date version of R Studio.
 2. Install needed packages from console using:
 ```R
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("sva")
+BiocManager::install("DESeq2")
 install.packages("UCSCXenaTools") # Can take a few minutes
 install.packages('feather')
 ```
@@ -43,11 +51,14 @@ install.packages('feather')
 
 
 The installed packages are:
+* ***sva*** ([Docs](https://bioconductor.org/packages/release/bioc/manuals/sva/man/sva.pdf)): Surrogate Variable Analysis package used to perform ComBAt_Seq batch correction in the data.
+* ***DESeq2*** ([Docs](https://bioconductor.org/packages/release/bioc/manuals/DESeq2/man/DESeq2.pdf)): Defferemtial expression package used to normalize batch corrected counts.
 * ***UCSCXenaTools*** ([Docs](https://cran.r-project.org/web/packages/UCSCXenaTools/UCSCXenaTools.pdf)): To easily handle the download of data from the [UCSCXena Portal](https://xenabrowser.net/datapages/?cohort=TCGA%20TARGET%20GTEx&removeHub=http%3A%2F%2F127.0.0.1%3A7222).
 * ***feather*** ([Docs](https://cran.r-project.org/web/packages/feather/feather.pdf)): To store data in an efficient and fast format that can be read using pandas.
 
 Note:
 * There can be problems downloading the `TcgaTargetGtex_rsem_gene_tpm.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/data_matrix.feather` file should have a size of 8.62 Gb. If it does not have this size, it is recomended to download directly the file from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
+* There can be problems downloading the `TcgaTargetGtex_gene_expected_count.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/count_matrix.feather` file should have a size of 8.61 Gb. If it does not have this size, it is recomended to download directly the file from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_gene_expected_count.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
 
 ## Download required python dependencies for CanDLE
 
@@ -88,4 +99,3 @@ And now you can train CanDLE running:
 ```
 
 You can run multiple experiments by changing the internal parameters of `one_exp.sh`
-
