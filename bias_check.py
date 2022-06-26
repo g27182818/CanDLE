@@ -4,7 +4,7 @@ from datasets import *
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import balanced_accuracy_score, classification_report
 
-dataset_to_check = 'wang'
+dataset_to_check = 'toil'
 
 if dataset_to_check=='toil':
     ################ Temporal parser code #######################
@@ -102,6 +102,7 @@ if dataset_to_check=='toil':
                                 corr_thr = coor_thr,
                                 p_thr = p_value_thr,
                                 label_type = 'phenotype',
+                                batch_normalization='normal',
                                 partition_seed = 0,
                                 force_compute = False)
 

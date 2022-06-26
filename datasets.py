@@ -1,4 +1,5 @@
 from ast import Raise
+from pyparsing import alphas
 import tqdm
 import pandas as pd
 import numpy as np
@@ -24,7 +25,8 @@ pd.options.mode.chained_assignment = None  # default='warn'
 class ToilDataset():
     def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
                 std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
-                label_type = 'phenotype', partition_seed=0, force_compute = False):
+                label_type = 'phenotype', batch_normalization='none', partition_seed=0,
+                force_compute = False):
         self.path = path
         self.tissue = tissue
         self.binary_dict = binary_dict
@@ -41,6 +43,7 @@ class ToilDataset():
         self.corr_thr = corr_thr
         self.p_thr = p_thr
         self.label_type = label_type # can be 'phenotype' or 'category'
+        self.batch_normalization = batch_normalization # TODO: Just allow batch normalization under certain conditions of datasets
         self.partition_seed = partition_seed # seed for train/val/test split
         self.force_compute = force_compute
 
@@ -54,6 +57,10 @@ class ToilDataset():
         self.filtered_gene_list, self.filtering_info, self.gene_filtered_data_matrix = self.filter_genes()
         # Get labels and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
+        # Find stats of each dataset segment
+        self.general_stats = self.find_means_and_stds()
+        # Perform batch normalization this uses files saved by self.find_means_and_stds() and normalizes self.gene_filtered_data_matrix  
+        self.batch_normalize()
         # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
         self.filter_by_tissue()
         # Make the problem binary in case self.binary_dict is not empty
@@ -288,7 +295,9 @@ class ToilDataset():
             # If there are both TCGA and GTEX assign GTEX textual label to the normal (Healthy) TCGA subjects
             if self.tcga and self.gtex:
                 # Put GTEX textual label in lab_txt column for normal (Healthy) TCGA samples
-                label_df.loc[normal_tcga_samples, "lab_txt"] = label_df.loc[normal_tcga_samples, "_primary_site"].map(normal_tcga_2_gtex)
+                # FIXME
+                # label_df.loc[normal_tcga_samples, "lab_txt"] = label_df.loc[normal_tcga_samples, "_primary_site"].map(normal_tcga_2_gtex)
+                pass
             # If there is only TCGA assign TCGA-NT label to the normal (Healthy) TCGA subjects
             elif self.tcga and (not self.gtex):
                 # Put TCGA textual label in lab_txt column for normal (Healthy) TCGA samples
@@ -316,6 +325,114 @@ class ToilDataset():
             json.dump(lab_txt_2_lab_num, f, indent = 4)
         return label_df, lab_txt_2_lab_num
     
+    # This function find the mean expression and std for GTEx, TCGA, healthy TCGA and the joint dataset
+    def find_means_and_stds(self):
+        # If the info stats are already computed load them from file
+        if os.path.exists(os.path.join(self.path, 'general_stats.csv')):
+            print('Loading general stats from '+os.path.join(self.path, 'general_stats.csv'))
+            general_stats = pd.read_csv(os.path.join(self.path, 'general_stats.csv'), index_col = 0)
+        # If the stats are not computed compiute them and save them in file
+        else:
+            print('Computing general stats and saving to '+os.path.join(self.path, 'general_stats.csv'))
+            # Define auxiliary tcga dataframe to obtain healthy tcga samples
+            tcga_df = self.label_df[self.label_df['_study']=='TCGA']
+
+            # Get the identidiers of the samples in each subset
+            gtex_samples = self.label_df[self.label_df['_study']=='GTEX'].index
+            tcga_samples = tcga_df.index
+            healthy_tcga_samples = tcga_df[tcga_df['lab_txt'].str.contains('GTEX')].index
+            joint_samples = self.label_df.index
+
+            # Compute the mean of the subsets
+            tqdm.pandas(desc="Computing Mean GTEx")
+            gtex_mean = self.matrix_data.loc[:, gtex_samples].progress_apply(np.mean, axis = 1).to_frame(name='gtex_mean')
+            tqdm.pandas(desc="Computing Mean TCGA")
+            tcga_mean = self.matrix_data.loc[:, tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='tcga_mean')
+            tqdm.pandas(desc="Computing Mean Healthy TCGA")
+            healthy_tcga_mean = self.matrix_data.loc[:, healthy_tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='healthy_tcga_mean')
+            tqdm.pandas(desc="Computing Joint Mean")
+            joint_mean = self.matrix_data.loc[:, joint_samples].progress_apply(np.mean, axis = 1).to_frame(name='joint_mean')
+
+            # Compute the std of the subsets
+            tqdm.pandas(desc="Computing std GTEx")
+            gtex_std = self.matrix_data.loc[:, gtex_samples].progress_apply(np.std, axis = 1).to_frame(name='gtex_std')
+            tqdm.pandas(desc="Computing std TCGA")
+            tcga_std = self.matrix_data.loc[:, tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='tcga_std')
+            tqdm.pandas(desc="Computing std Healthy TCGA")
+            healthy_tcga_std = self.matrix_data.loc[:, healthy_tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='healthy_tcga_std')
+            tqdm.pandas(desc="Computing Joint std")
+            joint_std = self.matrix_data.loc[:, joint_samples].progress_apply(np.std, axis = 1).to_frame(name='joint_std')
+
+            # Join stats in single dataframe
+            general_stats = pd.concat([gtex_mean, tcga_mean, healthy_tcga_mean, joint_mean, gtex_std, tcga_std, healthy_tcga_std, joint_std], axis=1)
+            general_stats.to_csv(os.path.join(self.path, 'general_stats.csv'))
+
+            return general_stats
+
+        # Make histogram plot
+        log_bool = False
+        density_bool = False
+        alpha_hist = 0.7
+        colors = [plt.cm.magma(0.8), plt.cm.magma(0.6), plt.cm.magma(0.4), plt.cm.magma(0.2)]
+        plt.rcParams['axes.axisbelow'] = True
+        plt.figure(figsize=(16, 6))
+        plt.subplot(1,2,1)
+        general_stats['joint_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[0], alpha=alpha_hist, histtype='stepfilled')
+        general_stats['gtex_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[1], alpha=alpha_hist, histtype='stepfilled')
+        general_stats['tcga_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[2], alpha=alpha_hist, histtype='stepfilled')
+        general_stats['healthy_tcga_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[3], alpha=alpha_hist, histtype='stepfilled')
+        plt.title('Mean Expression', fontsize=24)
+        plt.xlabel('Mean Gene Expression $[\log_2(TPM+0.001)]$', fontsize=18)
+        plt.ylabel('Frecuency', fontsize=18)
+        plt.legend(['Joint', 'GTEx', 'TCGA', 'Healthy TCGA'], fontsize=12)
+        plt.xlim([-10,10])
+        plt.subplot(1,2,2)
+        general_stats['joint_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[0], alpha=alpha_hist, histtype='stepfilled')
+        general_stats['gtex_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[1], alpha=alpha_hist, histtype='stepfilled')
+        general_stats['tcga_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[2], alpha=alpha_hist, histtype='stepfilled')
+        general_stats['healthy_tcga_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[3], alpha=alpha_hist, histtype='stepfilled')
+        plt.title('Standard Deviation of Expression', fontsize=24)
+        plt.xlabel('Std Gene Expression', fontsize=18)
+        plt.ylabel('Frecuency', fontsize=18)
+        plt.legend(['Joint', 'GTEx', 'TCGA', 'Healthy TCGA'], fontsize=12)
+        plt.xlim([0,6])
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.path, 'subset_histograms.png'), dpi=300)
+
+        return general_stats
+
+    # This function performs a data normalization 
+    def batch_normalize(self):
+        if self.batch_normalization=='none':
+            print('Did not perform batch normalization...')
+            return
+        else:
+            print('Batch normalizing matrix data...')
+            # Define auxiliary tcga dataframe to obtain healthy tcga samples
+            tcga_df = self.label_df[self.label_df['_study']=='TCGA']
+            # Get the identidiers of the samples in each subset
+            gtex_samples = self.label_df[self.label_df['_study']=='GTEX'].index
+            tcga_samples = tcga_df.index
+            # Get stats of the valid genes
+            valid_stats = self.general_stats.loc[self.filtered_gene_list, :]
+
+            # Transforms GTEx data
+            self.gene_filtered_data_matrix[gtex_samples] = self.gene_filtered_data_matrix[gtex_samples].sub(valid_stats['gtex_mean'], axis=0)
+            self.gene_filtered_data_matrix[gtex_samples] = self.gene_filtered_data_matrix[gtex_samples].div(valid_stats['gtex_std'], axis=0) 
+            # Transform TCGA data according to self.batch_normalization
+            if self.batch_normalization=='normal':
+                self.gene_filtered_data_matrix[tcga_samples] = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['tcga_mean'], axis=0)
+                self.gene_filtered_data_matrix[tcga_samples] = self.gene_filtered_data_matrix[tcga_samples].div(valid_stats['tcga_std'], axis=0)
+            elif self.batch_normalization=='healthy_tcga':
+                self.gene_filtered_data_matrix[tcga_samples] = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['healthy_tcga_mean'], axis=0)
+                self.gene_filtered_data_matrix[tcga_samples] = self.gene_filtered_data_matrix[tcga_samples].div(valid_stats['healthy_tcga_std'], axis=0)
+            else:
+                raise ValueError('Batch normalization should be none, normal or healthy_tcga.')
+
+            # Replace Nans generated by std division to 0's
+            self.gene_filtered_data_matrix = self.gene_filtered_data_matrix.fillna(0)
+        
+
     # This function modifies self.label_df and self.lab_txt_2_lab_num filtering by the specified tissue in self.tissue
     def filter_by_tissue(self):
         # If tissue is not specified, do not filter
@@ -578,17 +695,18 @@ class ToilDataset():
 
 
 
-# test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
-#                                 dataset = 'both', 
-#                                 tissue='all', 
-#                                 mean_thr=0.5, 
-#                                 std_thr=0.5, 
-#                                 use_graph=True, 
-#                                 corr_thr=0.6, 
-#                                 p_thr=0.05,
-#                                 label_type = 'phenotype',
-#                                 partition_seed=0,
-#                                 force_compute = False)
+test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
+                                dataset = 'both', 
+                                tissue='all', 
+                                mean_thr=-10, 
+                                std_thr=-1.0, 
+                                use_graph=False, 
+                                corr_thr=0.6,
+                                p_thr=0.05,
+                                label_type = 'phenotype',
+                                batch_normalization='normal', # Can be 'none', 'normal', 'healthy_tcga'
+                                partition_seed=0,
+                                force_compute = False)
 
 # breakpoint()
 
