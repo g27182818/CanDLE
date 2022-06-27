@@ -7,10 +7,10 @@ import pickle as pkl
 import matplotlib
 from adjustText import adjust_text
 
-mode = 'plot' # 'compute' or 'plot'
+mode = 'compute' # 'compute' or 'plot'
 dataset = 'both' # 'tcga', 'gtex' or 'both'
-gpu = '2'
-use_weights = True # True or False
+gpu = '0'
+use_weights = False # True or False
 
 if use_weights:
     exp_folder_name = 'all_vs_one_exp'
@@ -45,7 +45,7 @@ exp_names = [os.path.join(exp_folder_name, dataset, label) for label in labels]
 if mode == 'compute':
     for i in range(len(labels)):
         # run main.py with subprocess
-        command = 'python main.py --all_vs_one {} --exp_name {}'.format(labels[i], exp_names[i])
+        command = 'python main.py --all_vs_one {} --exp_name {} --batch_norm normal'.format(labels[i], exp_names[i])
         print(command)
         command = command.split()
         subprocess.call(command)
