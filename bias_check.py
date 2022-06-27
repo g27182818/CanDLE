@@ -117,7 +117,7 @@ if dataset_to_check=='toil':
     x_val = data['val'].T
     y_val = labels['val']
 
-    clf = LinearSVC(random_state=0, tol=1e-5, verbose=3, max_iter=10000)
+    clf = LinearSVC(random_state=0, verbose=3, max_iter=10000)
     clf.fit(x_train, y_train)
 
     # Get predictions
@@ -150,7 +150,7 @@ elif dataset_to_check=='wang':
     y_train = np.random.randint(2, size=len(y_train))
     y_test = np.random.randint(2, size=len(y_test))
 
-    clf = LinearSVC(random_state=0, tol=1e-5, verbose=3, max_iter=10000)
+    clf = LinearSVC(random_state=0, verbose=3, max_iter=10000)
     clf.fit(x_train, y_train)
 
     # Get predictions
