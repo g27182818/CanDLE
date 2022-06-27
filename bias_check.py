@@ -74,7 +74,7 @@ if dataset_to_check=='toil':
         use_graph = True
     elif model_type == "MLP_ALL":
         mean_thr = -10.0  
-        std_thr = -1.0    
+        std_thr = 0.1    
         use_graph = False
     else:
         raise NotImplementedError
@@ -112,12 +112,14 @@ if dataset_to_check=='toil':
     data = dataset.split_matrices
 
     x_train = data['train'].T
-    y_train = labels['train']
+    y_train = labels['train'].index.str.contains('TCGA')
+
+
 
     x_val = data['val'].T
-    y_val = labels['val']
+    y_val = labels['val'].index.str.contains('TCGA')
 
-    clf = LinearSVC(random_state=0, verbose=3, max_iter=10000)
+    clf = LinearSVC(random_state=0, verbose=4, max_iter=100000)
     clf.fit(x_train, y_train)
 
     # Get predictions
@@ -147,10 +149,10 @@ elif dataset_to_check=='wang':
     y_test = np.ravel(y_test.values)
 
     # Random test
-    y_train = np.random.randint(2, size=len(y_train))
-    y_test = np.random.randint(2, size=len(y_test))
+    # y_train = np.random.randint(2, size=len(y_train))
+    # y_test = np.random.randint(2, size=len(y_test))
 
-    clf = LinearSVC(random_state=0, verbose=3, max_iter=10000)
+    clf = LinearSVC(random_state=0, verbose=4, max_iter=100000)
     clf.fit(x_train, y_train)
 
     # Get predictions

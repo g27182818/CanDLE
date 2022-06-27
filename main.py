@@ -81,7 +81,7 @@ elif model_type == "BASELINE":
     use_graph = True
 elif model_type == "MLP_ALL":
     mean_thr = -10.0  
-    std_thr = -1.0    
+    std_thr = 0.1   
     use_graph = False
 else:
     raise NotImplementedError

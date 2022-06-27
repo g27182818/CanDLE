@@ -7,7 +7,7 @@ import pickle as pkl
 import matplotlib
 from adjustText import adjust_text
 
-mode = 'compute' # 'compute' or 'plot'
+mode = 'plot' # 'compute' or 'plot'
 dataset = 'both' # 'tcga', 'gtex' or 'both'
 gpu = '0'
 use_weights = False # True or False
@@ -142,20 +142,20 @@ if mode == 'plot' or mode == 'compute':
     # Plot of max F1 vs AP
     # plot max f1 vs ap. Set the size of the marker to be the size of the training set
     ax[1].scatter(AP_list, f1_list, s=2*np.array(n_list), c=color_matrix, cmap='magma', norm=normalization, alpha=0.8)
-    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.9 or f1_list[i]<0.9)]
+    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.8 or f1_list[i]<0.8)]
     [text.set_fontsize(13) for text in texts]
     adjust_text(texts)
-    plt.xlim([0.55, 1.02])
-    plt.ylim([0.55, 1.02])
+    plt.xlim([0.0, 1.04])
+    plt.ylim([0.0, 1.04])
     plt.xlabel('$AP$', fontsize=24)
     plt.ylabel('Max $F_1$', fontsize=24)
     plt.title('Max $F_1$ Vs Average Precision', fontsize=28)
     # Put box annotations on the plot
     bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9)
-    ax[1].text(0.7, 0.975, "Average Max $F_1={}$\nAverage $AP={}$".format(round(np.mean(f1_list),3), round(np.mean(AP_list),3)), ha="center", va="center", size=20,
+    ax[1].text(0.25, 0.975, "Average Max $F_1={}$\nAverage $AP={}$".format(round(np.mean(f1_list),3), round(np.mean(AP_list),3)), ha="center", va="center", size=20,
             bbox=bbox_props)
-    plt.xticks(np.arange(0.55, 1.05, 0.05))
-    plt.yticks(np.arange(0.55, 1.05, 0.05))
+    # plt.xticks(np.arange(0.55, 1.05, 0.05))
+    # plt.yticks(np.arange(0.55, 1.05, 0.05))
     plt.tick_params(labelsize=15)
     plt.grid(alpha=0.7)
     plt.gca().set_axisbelow(True)
