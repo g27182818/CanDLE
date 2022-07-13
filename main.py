@@ -32,7 +32,7 @@ parser.add_argument('--epochs',         type=int,   default=20,             help
 parser.add_argument('--adv_e_test',     type=float, default=0.01)
 parser.add_argument('--adv_e_train',    type=float, default=0.00)
 parser.add_argument('--n_iters_apgd',   type=int,   default=50)
-parser.add_argument('--mode',           type=str,   default="test")
+parser.add_argument('--mode',           type=str,   default="train")
 parser.add_argument('--num_test',       type=int,   default=69)
 parser.add_argument('--train_samples',  type=int,   default=-1,             help='Number of samples used for training the algorithm. -1 to run with all data.') # TODO: Program subsampling in dataset. In this moment this still does not work
 parser.add_argument('--exp_name',       type=str,   default='misc_test',    help="Experiment name to save")
@@ -115,7 +115,7 @@ train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = bat
 
 # Calculate loss function weights
 distribution = np.bincount(np.ravel(dataset.split_labels["train_val"].values).astype(np.int64))
-loss_wieghts = 200 / distribution
+loss_wieghts = 2500000 / (distribution**2)
 lw_tensor = torch.tensor(loss_wieghts, dtype=torch.float).to(device)
 
 # Handle model definition based on model type
@@ -132,8 +132,8 @@ print(model)
 
 # Define optimizer and criterion
 optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999))
-# criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
-criterion = torch.nn.CrossEntropyLoss() # Temporal experiment without weights
+criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
+# criterion = torch.nn.CrossEntropyLoss() # Temporal experiment without weights
 
 # Decide whether to train and test adversarially or not
 train_adversarial = train_eps > 0.0
@@ -165,7 +165,7 @@ pr_curves_fig_path = os.path.join(results_path, "pr_curves.png")
 if not os.path.isdir(results_path):
     os.makedirs(results_path)
 
-if mode == "test":
+if mode == "train":
     # Train/test cycle
     for epoch in range(total_epochs):
         print('-----------------------------------------')
@@ -219,8 +219,8 @@ if mode == "test":
         # Print performance
         print_epoch(train_metrics, val_metrics, adv_val_metrics, loss, epoch, train_log_path)
 
-        # Save checkpoints every 2 epochs
-        if (epoch+1) % 2 == 0:
+        # Save checkpoint at 20 epochs
+        if epoch+1== total_epochs:
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -252,6 +252,120 @@ if mode == "test":
                          adv_val_metrics["conf_matrix"],
                          dataset.lab_txt_2_lab_num,
                          conf_matrix_fig_path)
+
+elif mode == 'test':
+    # Declare path to load final model
+    final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(total_epochs)+".pt")
+    # Declare path to save a_plot 
+    a_plot_path = os.path.join(results_path, "a_plot.png")
+    # Declare path to save gene ranking csv
+    gene_ranking_path = os.path.join(results_path, "gene_ranking.csv")
+
+    # Load best model dicts
+    total_saved_dict = torch.load(final_model_path)
+    model_dict = total_saved_dict['model_state_dict']
+    optimizer_dict = total_saved_dict['optimizer_state_dict']
+
+    # Load state dicts to model and optimizer
+    model.load_state_dict(model_dict)
+    optimizer.load_state_dict(optimizer_dict)
+
+    # Put model in eval mode
+    model.eval()
+
+    test_metrics = test(test_loader, model, device, metric, num_classes=dataset.num_classes)
+    # metrics_attack, glob_delta, _, _ = test_and_get_attack(test_loader, model, device,
+    #                                                                     metric=metric,
+    #                                                                     optimizer=optimizer,
+    #                                                                     attack=pgd_linf_original, criterion=criterion,
+    #                                                                     num_classes=dataset.num_classes,
+    #                                                                     epsilon=test_eps, n_iter=200, alpha=0.0005)
+    
+    print('The metrics before the attack in test set are:')
+    print('balanced accuracy = {}'.format(test_metrics['mean_acc']))
+    print('total accuracy = {}'.format(test_metrics['tot_acc']))
+    print('mean average precision = {}'.format(test_metrics['mean_AP']))
+    # print('The metrics after the attack in test set are:')
+    # print('balanced accuracy = {}'.format(metrics_attack['mean_acc']))
+    # print('total accuracy = {}'.format(metrics_attack['tot_acc']))
+    # print('mean average precision = {}'.format(metrics_attack['mean_AP']))
+
+
+    # mean_abs_pert = np.abs(glob_delta).mean(axis=0)
+    # # mean_abs_pert = glob_delta.sum(axis=0)
+
+    # abs_array = np.abs(mean_abs_pert)
+    # # get sorted indexes in descending order
+    # sorted_indexes = abs_array.argsort()[::-1]
+
+    # gene_names = dataset.filtered_gene_list
+    # gene_rank = np.array(gene_names)[sorted_indexes]
+    # mean_abs_pert_ranked = mean_abs_pert[sorted_indexes]
+
+    # # Print top 10 genes and their perturbations as a prety table
+    # print("Top 10 Predictor Genes:")
+    # [print(gene_rank[i], round(mean_abs_pert_ranked[i], 4)) for i in range(10)]
+
+    # # Add gene_rank and mean_abs_pert_ranked to pandas dataframe
+    # df_rank = pd.DataFrame(data=np.array([gene_rank, mean_abs_pert_ranked]).T, columns=['gene', 'a'])
+    # # add column at the beginning of the dataframe with the index called rank
+    # df_rank.insert(0, 'rank', df_rank.index + 1)
+
+    # # Save dataframe to csv
+    # df_rank.to_csv(gene_ranking_path, index=False)
+
+
+    # # Make bar plot of the data
+    # plt.figure()
+    # plt.plot(range(len(mean_abs_pert)), mean_abs_pert, 'ok', markersize=2)
+    # plt.grid('on')
+    # plt.xlim(0, len(mean_abs_pert))
+    # plt.xlabel('Gene', fontsize=16)
+    # plt.ylabel('$a($Gene$)$', fontsize=16)
+    # plt.title('$a($Gene$)$', fontsize=20)
+    # plt.show()
+    # plt.savefig(a_plot_path, dpi=300)
+
+    # Get model weights
+    sample_cat= 60
+    weight_matrix = model.out.weight.detach().cpu().numpy()
+    tcga_weight_matrix = weight_matrix[30:, :]
+    
+
+    gene_names = np.array(dataset.filtered_gene_list)
+    rankings = np.argsort(np.abs(tcga_weight_matrix))
+    sorted_tcga_weight_matrix = np.zeros_like(tcga_weight_matrix)
+
+    for i in range(len(sorted_tcga_weight_matrix)):
+        sorted_vec = tcga_weight_matrix[i, rankings[i][::-1]]
+        sorted_tcga_weight_matrix[i] = sorted_vec
+        rankings[i] = rankings[i][::-1]
+    
+    k = 1000
+
+    top_k_ranking = rankings[:, :k]
+    frecuencies = np.bincount(top_k_ranking.flatten())
+    
+    frec_rank = np.argsort(frecuencies)[::-1]
+    gene_frec_sorted = gene_names[frec_rank]
+    frecuencies_sorted = frecuencies[frec_rank]
+
+    rank_frec_df = pd.DataFrame({'gene_name': gene_frec_sorted, 'frec': frecuencies_sorted})
+    print(rank_frec_df)
+    pd.DataFrame(rank_frec_df).to_csv('test_weights.csv')
+
+
+
+
+
+    # plt.figure()
+    # plt.plot(sample_vec, 'ok')
+    # plt.show()
+    # plt.savefig('sample_vec.png', dpi=300)
+
+
+
+
 # TODO: Handle demo mode correctly
 # elif mode == "demo":
 #     demo_saved_dict = torch.load("best_model.pt")

@@ -102,7 +102,7 @@ if dataset_to_check=='toil':
                                 corr_thr = coor_thr,
                                 p_thr = p_value_thr,
                                 label_type = 'phenotype',
-                                batch_normalization='normal',
+                                batch_normalization='none',
                                 partition_seed = 0,
                                 force_compute = False)
 
