@@ -9,7 +9,7 @@ from adjustText import adjust_text
 
 mode = 'plot' # 'compute' or 'plot'
 dataset = 'both' # 'tcga', 'gtex' or 'both'
-gpu = '0'
+gpu = '2'
 use_weights = False # True or False
 
 if use_weights:
@@ -118,17 +118,6 @@ if mode == 'plot' or mode == 'compute':
     for i in range(len(pr_curve_list)):
         pr_curve = pr_curve_list[i]
         ax[0].plot(pr_curve[1], pr_curve[0], color=color_matrix[i])
-    
-    # This was a try to annotate PR curves
-    # num=-25
-    # texts = []
-    # for i in range(len(pr_curve_list)):
-    #     act_pr_curve = pr_curve_list[i]
-    #     if (AP_list[i]<0.9 and f1_list[i]<0.9):
-    #         texts.append(ax[0].text(act_pr_curve[1][num], act_pr_curve[0][num], labels[i], ha='left', va='bottom'))
-    #         print(act_pr_curve[1][num], act_pr_curve[0][num], labels[i], len(act_pr_curve[1]))
-
-    # [text.set_fontsize(13) for text in texts]
     
     ax[0].set_xlabel('Recall', fontsize=24)
     ax[0].set_ylabel('Precision', fontsize=24)

@@ -132,8 +132,8 @@ print(model)
 
 # Define optimizer and criterion
 optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999))
-# criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
-criterion = torch.nn.CrossEntropyLoss() # Temporal experiment without weights
+criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
+# criterion = torch.nn.CrossEntropyLoss() # Temporal experiment without weights
 
 # Decide whether to train and test adversarially or not
 train_adversarial = train_eps > 0.0
