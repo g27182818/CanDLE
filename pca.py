@@ -60,7 +60,7 @@ dataset_toil_normal = ToilDataset(os.path.join("data", "toil_data"),
                                     corr_thr = 0.6,
                                     p_thr = 0.05,
                                     label_type = 'phenotype',
-                                    batch_normalization='healthy_tcga',
+                                    batch_normalization='normal',
                                     partition_seed = 0,
                                     force_compute = False)
 

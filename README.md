@@ -44,8 +44,12 @@ if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("sva")
 BiocManager::install("DESeq2")
+BiocManager::install("edgeR")
 install.packages("UCSCXenaTools") # Can take a few minutes
 install.packages('feather')
+install.packages("matrixStats")
+install.packages("pracma")
+install.packages("ggplot2")
 ```
 3. Run `toil_downloader.R` line by line or the complete script.
 
