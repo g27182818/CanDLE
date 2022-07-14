@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import torch
+from torch_geometric.utils import to_dense_batch
 import seaborn as sn
 import pandas as pd
 from AutoPGD.auto_pgd import apgd
@@ -159,7 +160,6 @@ def test(loader, model, device, metric, optimizer=None, adversarial=False, attac
             metric_result["max_f1"] = np.nanmax(2 * (precision * recall) / (precision + recall))
         else:
             binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
-        # TODO: Check if this mAP compute is correct: mAP is getting to 1 without mACC beeing 1
         AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
         mean_AP = np.mean(AP_list)
 
@@ -173,25 +173,98 @@ def test(loader, model, device, metric, optimizer=None, adversarial=False, attac
     return metric_result
 
 
-def pgd_linf(model, X, y, edge_index, batch, criterion, epsilon=0.01, alpha=0.001, num_iter=20, randomize=False):
-    """
-    Construct PGD adversarial examples in L_inf ball over the examples X (IMPORTANT: It returns the perturbation
-    (i.e. delta))
-    :param model: (torch.nn.Module) Classification model to construct the adversarial attack.
-    :param X: (torch.Tensor) The model inputs. Node features.
-    :param y: (torch.Tensor) Groundtruth classification of X.
-    :param edge_index: (torch.Tensor) Node conections of the input graph expected by the model. They come in the form of
-                        an adjacency list.
-    :param batch: (torch.Tensor) The batch vector specifying node correspondence to each complete graph on the batch.
-    :param criterion: (torch.optim.Optimizer) Loss function to optimize the adversarial attack (For this task
-                       CrossEntropy is used).
-    :param epsilon: (float) Radius of the L_inf ball to compute the perturbation (Default = 0.01).
-    :param alpha: (float) Learning rate of the adversarial gradient optimization (Default = 0.001).
-    :param num_iter: (int) Number of gradient iterations to obtain the adversarial example (Default = 20).
-    :param randomize: (bool) Parameter indicating to randomize the initial value of delta (Default = False).
-    :return: delta: (torch.Tensor) The optimized perturbation to the input X. This perturbarion is returned for the
-                    complete batch.
-    """
+def test_and_get_attack(loader, model, device, metric, optimizer=None, attack=None, num_classes=34, criterion=None, **kwargs):
+    
+    # Put model in evaluation mode
+    model.eval()
+
+    # Global true tensor
+    glob_true = np.array([])
+    # Global probability tensor
+    glob_pred = np.array([])
+    # Global delta array
+    glob_delta = np.array([])
+    # Global probability tensor
+    glob_prob = np.array([])
+
+    count = 1
+    # Computing loop
+    with tqdm(loader, unit="batch") as t_loader:
+        for data in t_loader:  # Iterate in batches over the training/test dataset.
+            t_loader.set_description(f"Batch {count}")
+            # Get the inputs of the model (x) and the groundtruth (y)
+            input_x, input_y = data.x.to(device), data.y.to(device)
+            # Handle the adversarial attack
+            delta = attack(model, input_x, input_y, data.edge_index.to(device), data.batch.to(device), criterion, **kwargs)
+            optimizer.zero_grad()
+            input_x = input_x+delta
+
+            # Get the model output
+            out = model(input_x, data.edge_index.to(device), data.batch.to(device))
+            # Get probabilities
+            prob = out.softmax(dim=1).cpu().detach().numpy()  # Finds probability for all cases
+            true = input_y.cpu().numpy()
+            # Stack cases with previous ones
+            glob_prob = np.vstack([glob_prob, prob]) if glob_prob.size else prob
+            glob_true = np.hstack((glob_true, true)) if glob_true.size else true
+            # Stack deltas with previous ones
+            delta = torch.reshape(delta, (data.batch.max()+1, -1))
+            glob_delta = np.vstack([glob_delta, delta.cpu().detach().numpy()]) if glob_delta.size else delta.cpu().detach().numpy()
+            # Update counter
+            count += 1
+
+    # Results dictionary declaration
+    metric_result = {}
+    # Handle the different metrics
+    if (metric == 'acc') or (metric == 'both'):
+        # Get predictions
+        glob_pred = glob_prob.argmax(axis=1)
+        conf_matrix = sklearn.metrics.confusion_matrix(glob_true, glob_pred, labels=np.arange(num_classes))
+        # Normalize confusion matrix by row
+        row_norm_conf_matrix = conf_matrix / np.sum(conf_matrix, axis=1, keepdims=True)
+        # Compute mean recall
+        mean_acc = np.mean(np.diag(row_norm_conf_matrix))
+        # Whole correctly classified cases
+        correct = np.sum(np.diag(conf_matrix))
+        tot_acc = correct / len(loader.dataset)
+
+        # Assign results
+        metric_result["mean_acc"] = mean_acc
+        metric_result["tot_acc"] = tot_acc
+        metric_result["conf_matrix"] = conf_matrix
+
+    if (metric == 'mAP') or (metric == 'both'):
+        # Get binary GT matrix
+        # Handle a binary problem because sklearn.preprocessing.label_binarize gives a matrix with only one column and two are needed
+        if num_classes == 2:
+            binary_gt = np.zeros((glob_true.shape[0], 2))
+            binary_gt[np.arange(glob_true.shape[0]), glob_true] = 1
+            # Cast binary_gt to int
+            binary_gt = binary_gt.astype(int)
+            # If the problem is binary the PR curve and max f1 are obtained for the positive class
+            precision, recall, thresholds = sklearn.metrics.precision_recall_curve(glob_true, glob_prob[:, 1])
+            metric_result["pr_curve"] = precision, recall, thresholds
+            # Compute max F1 score
+            metric_result["max_f1"] = np.nanmax(2 * (precision * recall) / (precision + recall))
+        else:
+            binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
+        AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
+        mean_AP = np.mean(AP_list)
+
+        # Assign results
+        metric_result["mean_AP"] = mean_AP
+        metric_result["AP_list"] = AP_list
+
+    if not ((metric == 'mAP') or (metric == 'both') or (metric == 'mAP')):
+        raise NotImplementedError
+
+    return metric_result, glob_delta, glob_true, glob_pred 
+
+
+
+
+
+def pgd_linf(model, X, y, edge_index, batch, criterion, epsilon=0.01, alpha=0.001, n_iter=20, randomize=False):
     # Handle starting point randomization
     if randomize:
         delta = torch.rand_like(X, requires_grad=True)
@@ -200,12 +273,30 @@ def pgd_linf(model, X, y, edge_index, batch, criterion, epsilon=0.01, alpha=0.00
         delta = torch.zeros_like(X, requires_grad=True)
 
     # Optimization cycle of delta
-    for t in range(num_iter):
+    for t in range(n_iter):
         loss = criterion(model(X + delta, edge_index, batch), y)
         loss.backward()
-        delta.data = (delta + alpha * delta.grad.detach().sign()).clamp(-epsilon, epsilon)
+        selected_genes = torch.squeeze(to_dense_batch(delta.grad, batch)[0]).argsort()<1000
+        delta.data = (delta + alpha * torch.reshape(selected_genes, shape=(-1,1))).clamp(-epsilon, epsilon)
         delta.grad.zero_()
     return delta.detach()
+
+def pgd_linf_original(model, X, y, edge_index, batch, criterion, epsilon=0.01, alpha=0.001, n_iter=20, randomize=False):
+    # Handle starting point randomization
+    if randomize:
+        delta = torch.rand_like(X, requires_grad=True)
+        delta.data = delta.data * 2 * epsilon - epsilon
+    else:
+        delta = torch.zeros_like(X, requires_grad=True)
+
+    # Optimization cycle of delta
+    for t in range(n_iter):
+        loss = criterion(model(X + delta, edge_index, batch), y)
+        loss.backward()
+        delta.data = (delta + alpha * (delta.grad.detach()/delta.grad.detach().std())).clamp(-epsilon, epsilon)
+        delta.grad.zero_()
+    return delta.detach()
+
 
 def apgd_graph(model, x, y, edge_index, batch, criterion, epsilon=0.01, **kwargs):
     """

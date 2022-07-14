@@ -295,7 +295,6 @@ class ToilDataset():
             # If there are both TCGA and GTEX assign GTEX textual label to the normal (Healthy) TCGA subjects
             if self.tcga and self.gtex:
                 # Put GTEX textual label in lab_txt column for normal (Healthy) TCGA samples
-                # FIXME
                 label_df.loc[normal_tcga_samples, "lab_txt"] = label_df.loc[normal_tcga_samples, "_primary_site"].map(normal_tcga_2_gtex)
                 # pass
             # If there is only TCGA assign TCGA-NT label to the normal (Healthy) TCGA subjects

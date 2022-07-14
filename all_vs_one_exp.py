@@ -8,12 +8,12 @@ import matplotlib
 from adjustText import adjust_text
 
 mode = 'plot' # 'compute' or 'plot'
-dataset = 'both' # 'tcga', 'gtex' or 'both'
-gpu = '2'
-use_weights = False # True or False
+dataset = 'tcga' # 'tcga', 'gtex' or 'both'
+gpu = '0'
+use_weights = True # True or False
 
 if use_weights:
-    exp_folder_name = 'all_vs_one_exp'
+    exp_folder_name = 'all_vs_one_exp_1_epoch'
 else:
     exp_folder_name = 'all_vs_one_exp_no_weights'
 
@@ -41,14 +41,17 @@ else:
 # Declare folder names for all experiments
 exp_names = [os.path.join(exp_folder_name, dataset, label) for label in labels]
 
+
 # If mode is 'compute', compute all experiments
 if mode == 'compute':
     for i in range(len(labels)):
-        # run main.py with subprocess
-        command = 'python main.py --all_vs_one {} --exp_name {} --batch_norm normal'.format(labels[i], exp_names[i])
-        print(command)
-        command = command.split()
-        subprocess.call(command)
+        # Just compute the models if they are not already computed
+        if not os.path.exists(os.path.join('Results', exp_names[i])):
+            # run main.py with subprocess
+            command = 'python main.py --all_vs_one {} --exp_name {} --batch_norm normal --epochs 10'.format(labels[i], exp_names[i])
+            print(command)
+            command = command.split()
+            subprocess.call(command)
 
 # Plot results
 if mode == 'plot' or mode == 'compute':
@@ -131,7 +134,7 @@ if mode == 'plot' or mode == 'compute':
     # Plot of max F1 vs AP
     # plot max f1 vs ap. Set the size of the marker to be the size of the training set
     ax[1].scatter(AP_list, f1_list, s=2*np.array(n_list), c=color_matrix, cmap='magma', norm=normalization, alpha=0.8)
-    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.8 or f1_list[i]<0.8)]
+    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.6 or f1_list[i]<0.6)]
     [text.set_fontsize(13) for text in texts]
     adjust_text(texts)
     plt.xlim([0.0, 1.04])
