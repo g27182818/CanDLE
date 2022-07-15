@@ -1,6 +1,6 @@
 #!/bin/bash
 # GPU to use
-GPU=1
+GPU=2
 # Dataset parameters #####################################
 DATASET=both
 TISSUE=all

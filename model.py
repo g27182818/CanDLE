@@ -91,6 +91,74 @@ class MLP(torch.nn.Module):
         output = self.out(x)
         return output
 
+# Define Multitask Hong Model
+class HongMultiTask(torch.nn.Module):
+    def __init__(self, input_size):
+        """
+        This is an approximate re-implementation of the desease stage and tissue type model by Hong et al in doi: 10.1038/s41598-022-13665-5 
+        "A deep learning model to classify neoplastic state and tissue origin from transcriptomic data" In this case the multitask
+        desease stage head just has 2 classes: cancer and healthy
+        """
+        super(HongMultiTask, self).__init__()
+        self.input_size = input_size
+
+        self.lin1 = nn.Linear(self.input_size, 1832)
+        self.lin2 = nn.Linear(1832, 29)
+        self.lin3 = nn.Linear(29, 429)
+        self.lin4 = nn.Linear(429, 203)
+        self.lin5 = nn.Linear(203, 118)
+        self.cancer_head = nn.Linear(118, 2)
+        self.tissue_head = nn.Linear(118, 30)
+
+    def forward(self, x):
+
+        x = F.relu(self.lin1(x))
+        x = F.relu(self.lin2(x))
+        x = F.relu(self.lin3(x))
+        x = F.dropout(x, p=0.1, training=self.training)
+        x = F.relu(self.lin4(x))
+        x = F.dropout(x, p=0.1, training=self.training)
+        x = F.relu(self.lin5(x))
+        x = F.dropout(x, p=0.1, training=self.training)
+
+        y_cancer = self.cancer_head(x)
+        y_tissue = self.tissue_head(x)
+
+        return y_cancer, y_tissue
+
+# Define Subtype cancer classification Hong Model
+class HongSubType(torch.nn.Module):
+    def __init__(self, input_size):
+        """
+        This is an approximate re-implementation of the desease stage and tissue type model by Hong et al in doi: 10.1038/s41598-022-13665-5 
+        "A deep learning model to classify neoplastic state and tissue origin from transcriptomic data" In this case the multitask
+        desease stage head just has 2 classes: cancer and healthy
+        """
+        super(HongSubType, self).__init__()
+        self.input_size = input_size
+
+        self.lin1 = nn.Linear(self.input_size, 784)
+        self.lin2 = nn.Linear(784, 308)
+        self.lin3 = nn.Linear(308, 344)
+        self.lin4 = nn.Linear(344, 21)
+        self.lin5 = nn.Linear(21, 62)
+        self.subtype_head = nn.Linear(62, 16)
+
+    def forward(self, x):
+
+        x = F.relu(self.lin1(x))
+        x = F.relu(self.lin2(x))
+        x = F.relu(self.lin3(x))
+        x = F.dropout(x, p=0.1, training=self.training)
+        x = F.relu(self.lin4(x))
+        x = F.dropout(x, p=0.1, training=self.training)
+        x = F.relu(self.lin5(x))
+        x = F.dropout(x, p=0.1, training=self.training)
+
+        y_subtype = self.subtype_head(x)
+
+        return y_subtype
+
 
 
 
