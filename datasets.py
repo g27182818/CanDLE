@@ -480,7 +480,7 @@ class ToilDataset():
             # Define numeric labels from the textual labels in self.label_df
             self.label_df["lab_num"] = self.label_df["lab_txt"].map(self.lab_txt_2_lab_num)   
             print("Made binary problem.")
-            print("Number of class 0: {}, number of class 1: {}".format(len(self.label_df[self.label_df["lab_num"] == 0]), len(self.label_df[self.label_df["lab_num"] == 1])))
+            print("Number of samples in class 0: {}, number of samples in class 1: {}".format(len(self.label_df[self.label_df["lab_num"] == 0]), len(self.label_df[self.label_df["lab_num"] == 1])))
             return
 
     # This function uses self.label_df to split the data into train, validation and test sets

@@ -7,6 +7,7 @@ import json
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import sklearn
+from sklearn.decomposition import PCA
 # Import auxiliary functions
 from utils import *
 from model import *
@@ -48,6 +49,8 @@ metric = 'both'                     # Evaluation metric for experiment. Can be '
 mean_thr = -10.0  
 std_thr = 0.1   
 use_graph = False
+epochs = 500
+pca = True
 
 
 # Handle the posibility of an all vs one binary problem
@@ -162,6 +165,19 @@ class HongDataset(Dataset):
         label = self.annot[idx]
         return sample, label
 
+# Handle the possible PCA in the input
+if pca:
+    joint_matrix = pd.concat([dataset.split_matrices['train'], dataset.split_matrices['val'], dataset.split_matrices['test']], axis=1)
+    pca = PCA(n_components=1000)
+    print('Started computing PCA, this may take a few minutes...')
+    pca.fit(joint_matrix)
+    print('PCA computed. Working with the first 1000 components...')
+    joint_matrix = pd.DataFrame(pca.components_, columns=joint_matrix.columns)
+    dataset.split_matrices['train'] = joint_matrix[dataset.split_matrices['train'].columns]
+    dataset.split_matrices['val'] = joint_matrix[dataset.split_matrices['val'].columns]
+    dataset.split_matrices['test'] = joint_matrix[dataset.split_matrices['test'].columns]
+
+
 # Declare datasets
 # multitask
 train_data = HongDataset(dataset.split_matrices['train'], hong_annotations['train'])
@@ -182,18 +198,27 @@ subtype_train_dataloader = DataLoader(subtype_train_data, batch_size=421, shuffl
 subtype_val_dataloader = DataLoader(subtype_val_data, batch_size=421, shuffle=False)
 subtype_test_dataloader = DataLoader(subtype_test_data, batch_size=421, shuffle=False)
 
+# Handle input size in case we use a pca before
+input_size = 1000 if pca else len(dataset.filtered_gene_list)
+
 # Create models
-hong_multitask_model = HongMultiTask(input_size = len(dataset.filtered_gene_list)).to(device)
-hong_subtype_model = HongSubType(input_size = len(dataset.filtered_gene_list)).to(device)
+hong_multitask_model = HongMultiTask(input_size = input_size).to(device)
+hong_subtype_model = HongSubType(input_size = input_size).to(device)
 
 # Declare criterions
 cancer_criterion = torch.nn.CrossEntropyLoss()
 tissue_criterion = torch.nn.CrossEntropyLoss()
 subtype_criterion = torch.nn.CrossEntropyLoss()
 
+# Handle differences in learning rates when training with PCA
+if pca:
+    lr_multitask, lr_subtype = 6.3e-4, 4.9e-4
+else:
+    lr_multitask, lr_subtype = 6.3e-6, 4.9e-6
+
 # Declare optimizers
-multitask_optimizer = torch.optim.AdamW(hong_multitask_model.parameters(), lr=6.3e-5)
-subtype_optimizer = torch.optim.AdamW(hong_subtype_model.parameters(), lr=4.9e-5)
+multitask_optimizer = torch.optim.AdamW(hong_multitask_model.parameters(), lr=lr_multitask)
+subtype_optimizer = torch.optim.AdamW(hong_subtype_model.parameters(), lr=lr_subtype)
 
 # define train function multitask
 def train_multitask(train_loader, model, device, cancer_criterion, tissue_criterion, optimizer):
@@ -332,7 +357,7 @@ def test_subtask(loader, model, device):
     
     return subtype_macc, pred_subtype
 
-for i in range(50):
+for i in range(epochs):
     # Train one epoch in multitask and subtype task
     total_loss, cancer_loss, tissue_loss = train_multitask(train_dataloader, hong_multitask_model, device,
                                                             cancer_criterion, tissue_criterion, multitask_optimizer)
