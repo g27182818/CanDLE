@@ -50,7 +50,7 @@ mean_thr = -10.0
 std_thr = 0.1   
 use_graph = False
 epochs = 500
-pca = True
+pca = False
 
 
 # Handle the posibility of an all vs one binary problem
