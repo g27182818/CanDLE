@@ -49,7 +49,7 @@ metric = 'both'                     # Evaluation metric for experiment. Can be '
 # ---------------------------------------------------------------------------------------------------------------------#
 
 mean_thr = -10.0  
-std_thr = 0.1   
+std_thr = 2.0   # FIXME
 use_graph = False
 
 # Code taken from Quinn et all repository ################################
@@ -170,7 +170,6 @@ for actual_label in tcga_label_list:
 
 print('Global results :')
 print('max F1: {:.3f} | AP: {:.3f}'.format(np.mean(max_f1_list),np.mean(ap_list)))
-breakpoint()
 
 
 

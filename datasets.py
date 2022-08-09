@@ -418,19 +418,22 @@ class ToilDataset():
             # Transforms GTEx data
             normalized_gtex = self.gene_filtered_data_matrix[gtex_samples].sub(valid_stats['gtex_mean'], axis=0)
             normalized_gtex = normalized_gtex.div(valid_stats['gtex_std'], axis=0)
-            # Some genes have such low std that they do not normalize correctly. This zeros out this genes
-            normalized_gtex[normalized_gtex.T.mean()>0.001] = 0.0 
-            # Transform TCGA data according to self.batch_normalization
+            # This ensures the numerical stability of normalization zeroing genes with std bellow 10^(-8).
+            normalized_gtex[normalized_gtex.T.mean()>1e-8] = 0.0 
+           
+           # Transform TCGA data according to self.batch_normalization
             if self.batch_normalization=='normal':
                 normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['tcga_mean'], axis=0)
                 normalized_tcga = normalized_tcga.div(valid_stats['tcga_std'], axis=0)
-                # Some genes have such low std that they do not normalize correctly. This zeros out this genes
-                normalized_tcga[normalized_tcga.T.mean()>0.001] = 0.0 
+                # This ensures the numerical stability of normalization zeroing genes with std bellow 10^(-8).
+                normalized_tcga[normalized_tcga.T.mean()>1e-8] = 0.0 
+            
             elif self.batch_normalization=='healthy_tcga':
                 normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['healthy_tcga_mean'], axis=0)
                 normalized_tcga = normalized_tcga.div(valid_stats['healthy_tcga_std'], axis=0)
-                # Some genes have such low std that they do not normalize correctly. This zeros out this genes
-                normalized_tcga[normalized_tcga.T.mean()>0.001] = 0.0
+                # This ensures the numerical stability of normalization zeroing genes with std bellow 10^(-8).
+                normalized_tcga[normalized_tcga.T.mean()>1e-8] = 0.0
+            
             else:
                 raise ValueError('Batch normalization should be none, normal or healthy_tcga.')
 

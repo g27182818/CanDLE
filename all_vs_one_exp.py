@@ -7,15 +7,15 @@ import pickle as pkl
 import matplotlib
 from adjustText import adjust_text
 
-mode = 'plot' # 'compute' or 'plot'
+mode = 'compute' # 'compute' or 'plot'
 dataset = 'tcga' # 'tcga', 'gtex' or 'both'
-gpu = '0'
+gpu = '2'
 use_weights = True # True or False
 
 if use_weights:
     exp_folder_name = 'all_vs_one_exp_1_epoch'
 else:
-    exp_folder_name = 'all_vs_one_exp_no_weights'
+    exp_folder_name = 'all_vs_one_exp_1_epoch_no_weights'
 
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
@@ -48,7 +48,7 @@ if mode == 'compute':
         # Just compute the models if they are not already computed
         if not os.path.exists(os.path.join('Results', exp_names[i])):
             # run main.py with subprocess
-            command = 'python main.py --all_vs_one {} --exp_name {} --batch_norm normal --epochs 10'.format(labels[i], exp_names[i])
+            command = 'python main.py --all_vs_one {} --exp_name {} --batch_norm normal --epochs 1'.format(labels[i], exp_names[i])
             print(command)
             command = command.split()
             subprocess.call(command)

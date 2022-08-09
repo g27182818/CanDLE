@@ -47,7 +47,7 @@ metric = 'both'                     # Evaluation metric for experiment. Can be '
 # ---------------------------------------------------------------------------------------------------------------------#
 
 mean_thr = -10.0  
-std_thr = 0.1   
+std_thr = 0.0   
 use_graph = False
 epochs = 500
 pca = False
@@ -168,10 +168,10 @@ class HongDataset(Dataset):
 # Handle the possible PCA in the input
 if pca:
     joint_matrix = pd.concat([dataset.split_matrices['train'], dataset.split_matrices['val'], dataset.split_matrices['test']], axis=1)
-    pca = PCA(n_components=1000)
+    pca = PCA(n_components=2000)
     print('Started computing PCA, this may take a few minutes...')
     pca.fit(joint_matrix)
-    print('PCA computed. Working with the first 1000 components...')
+    print('PCA computed. Working with the first 2000 components...')
     joint_matrix = pd.DataFrame(pca.components_, columns=joint_matrix.columns)
     dataset.split_matrices['train'] = joint_matrix[dataset.split_matrices['train'].columns]
     dataset.split_matrices['val'] = joint_matrix[dataset.split_matrices['val'].columns]
@@ -199,7 +199,7 @@ subtype_val_dataloader = DataLoader(subtype_val_data, batch_size=421, shuffle=Fa
 subtype_test_dataloader = DataLoader(subtype_test_data, batch_size=421, shuffle=False)
 
 # Handle input size in case we use a pca before
-input_size = 1000 if pca else len(dataset.filtered_gene_list)
+input_size = 2000 if pca else len(dataset.filtered_gene_list)
 
 # Create models
 hong_multitask_model = HongMultiTask(input_size = input_size).to(device)

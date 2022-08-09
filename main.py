@@ -13,7 +13,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 ################ Temporal parser code #######################
-################ Must be replace by configs #################
+################ Must be replaced by configs #################
 # Import the library
 import argparse
 # Create the parser
@@ -22,7 +22,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                  choices=["both", "tcga", "gtex"])
 parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
 parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multiclass problem, if other string solves a binary problem with this as the positive class.",  choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
-parser.add_argument('--batch_norm',     type=str,   default="none",         help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
+parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
+parser.add_argument('--seed',           type=int,   default=0,              help="Partition seed to divide tha data. Default is 0.")
+
 
 parser.add_argument('--model',          type=str,   default="MLP_ALL",      help="Model to use. Baseline is a graph neural network",                                                                choices=["MLP_ALL", "MLP_FIL", "BASELINE"])
 
@@ -81,7 +83,7 @@ elif model_type == "BASELINE":
     use_graph = True
 elif model_type == "MLP_ALL":
     mean_thr = -10.0  
-    std_thr = 0.1   
+    std_thr = 0.0
     use_graph = False
 else:
     raise NotImplementedError
@@ -106,7 +108,7 @@ dataset = ToilDataset(os.path.join("data", "toil_data"),
                             p_thr = p_value_thr,
                             label_type = 'phenotype',
                             batch_normalization=batch_norm,
-                            partition_seed = 0,
+                            partition_seed = args.seed,
                             force_compute = False)
 
 # Dataloader declaration
@@ -261,7 +263,7 @@ elif mode == 'test':
     # Declare path to save gene ranking csv
     gene_ranking_path = os.path.join(results_path, "gene_ranking.csv")
 
-    # Load best model dicts
+    # Load final model dicts
     total_saved_dict = torch.load(final_model_path)
     model_dict = total_saved_dict['model_state_dict']
     optimizer_dict = total_saved_dict['optimizer_state_dict']
@@ -326,8 +328,7 @@ elif mode == 'test':
     # plt.show()
     # plt.savefig(a_plot_path, dpi=300)
 
-    # Get model weights
-    sample_cat= 60
+    # Get model weights 
     weight_matrix = model.out.weight.detach().cpu().numpy()
     tcga_weight_matrix = weight_matrix[30:, :]
     
