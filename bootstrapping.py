@@ -119,7 +119,7 @@ if mode == 'interpret':
 
     top_k_ranking = rankings[:, :k]
     frecuencies = np.bincount(top_k_ranking.flatten())
-    
+
     frec_rank = np.argsort(frecuencies)[::-1]
     gene_frec_sorted = gene_names[frec_rank]
     frecuencies_sorted = frecuencies[frec_rank]

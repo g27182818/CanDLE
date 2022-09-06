@@ -4,9 +4,13 @@ from datasets import *
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import balanced_accuracy_score, classification_report
 
-dataset_to_check = 'toil'
+# Set axis bellow for matplotlib
+plt.rcParams['axes.axisbelow'] = True
 
-if dataset_to_check=='toil':
+# Dataset to check
+dataset_to_check = 'toil_norm' # toil or wang or toil_norm
+
+if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
     ################ Temporal parser code #######################
     ################ Must be replace by configs #################
     # Import the library
@@ -89,6 +93,8 @@ if dataset_to_check=='toil':
         else:
             binary_dict[label] = 1
 
+    # Define normalization
+    norm_str = 'none' if dataset_to_check=='toil' else 'normal'
 
 
     # Declare dataset
@@ -102,7 +108,7 @@ if dataset_to_check=='toil':
                                 corr_thr = coor_thr,
                                 p_thr = p_value_thr,
                                 label_type = 'phenotype',
-                                batch_normalization='none',
+                                batch_normalization=norm_str,
                                 partition_seed = 0,
                                 force_compute = False)
 
@@ -111,52 +117,83 @@ if dataset_to_check=='toil':
     labels = dataset.split_labels
     data = dataset.split_matrices
 
+    # Get binary labels: 1 == sample is from TCGA
     x_train = data['train'].T
     y_train = labels['train'].index.str.contains('TCGA')
 
-
-
     x_val = data['val'].T
     y_val = labels['val'].index.str.contains('TCGA')
+
+    clf = LinearSVC(random_state=0, verbose=4, max_iter=1000)
+    clf.fit(x_train, y_train)
+
+    # Get predictions
+    y_pred = clf.predict(x_val)
+    print(classification_report(y_val, y_pred))
+
+    # Define save path for histogram
+    save_path = 'toil_svm_distance.png' if dataset_to_check=='toil' else 'normalized_toil_svm_distance.png'
+
+
+
+elif dataset_to_check=='wang':
+
+    dataset = WangDataset(os.path.join('data', 'wang_data'))
+    train_index, val_index = train_test_split(dataset.categories["is_tcga"], test_size = 0.2, random_state = 0, stratify = dataset.categories["is_tcga"].values)
+    complete_dataset = dataset.matrix_data
+    del complete_dataset['Hugo_Symbol']
+    del complete_dataset['Gene_Hugo_Symbol']
+    x_train, x_val = complete_dataset.iloc[2:, train_index.index], complete_dataset.iloc[2:, val_index.index]
+    y_train = dataset.categories.loc[train_index.index, ['sample', 'is_tcga']].set_index('sample')
+    y_val = dataset.categories.loc[val_index.index, ['sample', 'is_tcga']].set_index('sample')
+
+    x_train = x_train.T.values
+    x_val = x_val.T.values
+
+    # Transforms
+    x_train = np.log2(x_train+1)
+    x_val = np.log2(x_val+1)
+
+    y_train = np.ravel(y_train.values)
+    y_val = np.ravel(y_val.values)
+
+    # Random test
+    # y_train = np.random.randint(2, size=len(y_train))
+    # y_val = np.random.randint(2, size=len(y_val))
 
     clf = LinearSVC(random_state=0, verbose=4, max_iter=100000)
     clf.fit(x_train, y_train)
 
     # Get predictions
     y_pred = clf.predict(x_val)
-
     print(classification_report(y_val, y_pred))
 
-elif dataset_to_check=='wang':
+    # Define save path for histogram
+    save_path = 'wang_svm_distance.png'
 
-    dataset = WangDataset(os.path.join('data', 'wang_data'))
-    train_index, test_index = train_test_split(dataset.categories["is_tcga"], test_size = 0.2, random_state = 0, stratify = dataset.categories["is_tcga"].values)
-    complete_dataset = dataset.matrix_data
-    del complete_dataset['Hugo_Symbol']
-    del complete_dataset['Gene_Hugo_Symbol']
-    x_train, x_test = complete_dataset.iloc[2:, train_index.index], complete_dataset.iloc[2:, test_index.index]
-    y_train = dataset.categories.loc[train_index.index, ['sample', 'is_tcga']].set_index('sample')
-    y_test = dataset.categories.loc[test_index.index, ['sample', 'is_tcga']].set_index('sample')
 
-    x_train = x_train.T.values
-    x_test = x_test.T.values
+# Get the norm of the hiperplane
+plane_norm = np.linalg.norm(clf.coef_)
+# Get decision function values
+dec_function = clf.decision_function(x_val)
+# Get distances
+dist_plane = dec_function/plane_norm
 
-    # Transforms
-    x_train = np.log2(x_train+1)
-    x_test = np.log2(x_test+1)
+# Distance of TCGA and GTEx specifically
+tcga_dist = dist_plane[y_val]
+gtex_dist = dist_plane[~y_val]
 
-    y_train = np.ravel(y_train.values)
-    y_test = np.ravel(y_test.values)
-
-    # Random test
-    # y_train = np.random.randint(2, size=len(y_train))
-    # y_test = np.random.randint(2, size=len(y_test))
-
-    clf = LinearSVC(random_state=0, verbose=4, max_iter=100000)
-    clf.fit(x_train, y_train)
-
-    # Get predictions
-    y_pred = clf.predict(x_test)
-
-    print(classification_report(y_test, y_pred))
-
+# Plot and save histogram of distances 
+plt.figure(figsize=(17,5))
+plt.hist(tcga_dist, bins=40, color='#4c8682', label='TCGA', alpha=0.8)
+plt.hist(gtex_dist, bins=40, color='k', label='GTEx', alpha=0.8)
+plt.title('Separation Histogram', fontsize=40)
+plt.xlabel('Distance from SVM Plane', fontsize=30)
+plt.ylabel('Frecuency', fontsize=30)
+plt.legend(loc=2, fontsize=20)
+ax = plt.gca()
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.tight_layout()
+# plt.grid()
+plt.savefig(save_path, dpi=300)

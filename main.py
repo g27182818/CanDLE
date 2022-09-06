@@ -12,6 +12,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+# Set axis bellow for matplotlib
+plt.rcParams['axes.axisbelow'] = True
+
 ################ Temporal parser code #######################
 ################ Must be replaced by configs #################
 # Import the library
@@ -331,7 +334,6 @@ elif mode == 'test':
     # Get model weights 
     weight_matrix = model.out.weight.detach().cpu().numpy()
     tcga_weight_matrix = weight_matrix[30:, :]
-    
 
     gene_names = np.array(dataset.filtered_gene_list)
     rankings = np.argsort(np.abs(tcga_weight_matrix))
@@ -353,16 +355,28 @@ elif mode == 'test':
 
     rank_frec_df = pd.DataFrame({'gene_name': gene_frec_sorted, 'frec': frecuencies_sorted})
     print(rank_frec_df)
-    pd.DataFrame(rank_frec_df).to_csv('test_weights.csv')
+    pd.DataFrame(rank_frec_df).to_csv('one_candle_weights.csv')
 
 
+    # Make scatter plot of weights of a single random class
+    rand_int = np.random.randint(0,33)
+    threshold = sorted_tcga_weight_matrix[rand_int, k]
+    plt.figure()
+    plt.plot(tcga_weight_matrix[i], '.k', markersize=2, alpha=0.4)
+    plt.plot([0, len(tcga_weight_matrix[i])],[threshold, threshold], '--r')
+    plt.plot([0, len(tcga_weight_matrix[i])],[-threshold, -threshold], '--r')
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    plt.xlim(0, len(tcga_weight_matrix[i]))
+    plt.xlabel('Gene', fontsize=16)
+    plt.ylabel('$w ($Gene$)$', fontsize='large')
+    plt.title(f'Weights for class {rand_int}', fontsize='xx-large')
+    plt.show()
+    plt.tight_layout()
+    plt.savefig('weights_plot.png', dpi=300)
 
 
-
-    # plt.figure()
-    # plt.plot(sample_vec, 'ok')
-    # plt.show()
-    # plt.savefig('sample_vec.png', dpi=300)
 
 
 

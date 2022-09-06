@@ -780,8 +780,8 @@ class WangDataset():
         # Unzip data if original_data does not exist
         else:
             print('Unzipping files this may take some minutes...')
-            zipped_path = os.path.join(self.path, '5330593.zip')
-            unzipped_folder = os.path.join(self.path, '5330593_unzipped')
+            zipped_path = os.path.join(self.path, 'raw_data.zip')
+            unzipped_folder = os.path.join(self.path, 'raw_data_unzipped')
             final_data_path = os.path.join(self.path, 'original_data')
 
             with zipfile.ZipFile(zipped_path, 'r') as zip_ref:
