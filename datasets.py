@@ -22,9 +22,11 @@ from utils import *
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
+# TODO: Remove use_graph, coor_thr, p_value_thr parameters from this class
+
 class ToilDataset():
     def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
+                std_thr=0.5, use_graph=False, corr_thr=0.6, p_thr=0.05,
                 label_type = 'phenotype', batch_normalization='none', partition_seed=0,
                 force_compute = False):
         self.path = path
