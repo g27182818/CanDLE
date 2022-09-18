@@ -90,7 +90,7 @@ if mode == 'plot' or mode == 'compute':
     normalization = matplotlib.colors.LogNorm(vmin=np.min(n_vec), vmax=np.max(n_vec))
     color_vec = normalization(n_vec)
     color_matrix = plt.cm.magma(color_vec)
-    
+
 
     plt.figure(figsize=(22,10))
     plt.subplot(121)
@@ -138,7 +138,7 @@ if mode == 'plot' or mode == 'compute':
 
     # Plot of max F1 vs AP
     # plot max f1 vs ap. Set the size of the marker to be the size of the training set
-    ax[1].scatter(AP_list, f1_list, s=2*np.array(n_list), c=color_matrix, cmap='magma', norm=normalization, alpha=0.8)
+    ax[1].scatter(AP_list, f1_list, s=2*np.array(n_list), c=color_matrix, alpha=0.8)
     texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.6 or f1_list[i]<0.6)]
     [text.set_fontsize(13) for text in texts]
     adjust_text(texts)
@@ -156,7 +156,7 @@ if mode == 'plot' or mode == 'compute':
     plt.tick_params(labelsize=15)
     plt.grid(alpha=0.7)
     plt.gca().set_axisbelow(True)
-    cbar = plt.colorbar(plt.cm.ScalarMappable(norm=normalization, cmap='magma'))
+    cbar = plt.colorbar(plt.cm.ScalarMappable(norm=normalization, cmap='magma'), ax=ax[1])
     cbar.ax.tick_params(labelsize=15)
     cbar.set_label('Train Samples', fontsize=24)
     plt.tight_layout(w_pad=3)
