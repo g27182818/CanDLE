@@ -15,75 +15,59 @@ import matplotlib.pyplot as plt
 # Set axis bellow for matplotlib
 plt.rcParams['axes.axisbelow'] = True
 
-################ Temporal parser code #######################
-################ Must be replaced by configs #################
+################ Parser code ###########################
 # Import the library
 import argparse
 # Create the parser
 parser = argparse.ArgumentParser()
 # Add an argument
-parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                  choices=["both", "tcga", "gtex"])
-parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
-parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multiclass problem, if other string solves a binary problem with this as the positive class.",  choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
-parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
+parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                      choices=["both", "tcga", "gtex"])
+parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                             choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
+parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multiclass problem, if other string solves a binary problem with this as the positive class.",      choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
+parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                              choices=["none", "normal", "healthy_tcga"])
+parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression estrictly greater.")
+parser.add_argument('--std_thr',        type=float, default=0.0,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std estrictly greater.")
 parser.add_argument('--seed',           type=int,   default=0,              help="Partition seed to divide tha data. Default is 0.")
 
 
-parser.add_argument('--model',          type=str,   default="MLP_ALL",      help="Model to use. Baseline is a graph neural network",                                                                choices=["MLP_ALL", "MLP_FIL", "BASELINE"])
-
 parser.add_argument('--lr',             type=float, default=0.00001,        help="Learning rate")
+parser.add_argument('--weights',        type=str,   default='True',         help="Wether to train CanDLE with weighted cross entropy",                                                                   choices=['True', 'False'])
 parser.add_argument('--batch_size',     type=int,   default=100,            help="Batch size")
 parser.add_argument('--epochs',         type=int,   default=20,             help="Number of epochs")
-parser.add_argument('--mode',           type=str,   default="train")
-parser.add_argument('--train_samples',  type=int,   default=-1,             help='Number of samples used for training the algorithm. -1 to run with all data.') # TODO: Program subsampling in dataset. In this moment this still does not work
+parser.add_argument('--mode',           type=str,   default="train",        help="Train or test CanDLE model.",                                                                                          choices=['train', 'test'])
 parser.add_argument('--exp_name',       type=str,   default='misc_test',    help="Experiment name to save")
 # Parse the argument
 args = parser.parse_args()
 #############################################################
 
-# ------------------- Important variable parameters -------------------------------------------------------------------#
+
 # Miscellaneous parameters --------------------------------------------------------------------------------------------#
 torch.manual_seed(12345)            # Set torch manual seed                                                            #
 device = torch.device("cuda")       # Set cuda device                                                                  # # TODO: Make cuda or cpu if cuda is not available
-mode = args.mode                    # Mode to run in code submission can be "test" or "demo"                           #
-# Dataset parameters --------------------------------------------------------------------------------------------------#
-mean_thr = -10.0                    # Mean expression threshold to filter out genes in toil.                           #  
-std_thr = 0.0                       # Standard deviation threshold to filter out genes in toil.                        #
-val_fraction = 0.2                  # Fraction of the data used for validation                                         #
-train_smaples = args.train_samples  # Number of samples used for training the algorithm. -1 to run with all data.      #
-dataset = args.dataset              # Dataset to use can be "both", "tcga" or "gtex"                                   #
-tissue = args.tissue                # Tissue to use from data. "all" to use all tissues                                #
-batch_size = args.batch_size        # Batch size parameter                                                             #
-all_vs_one = args.all_vs_one        # If False multiclass problem else defines the positive class for binary problem   #
-batch_norm = args.batch_norm        # Kind of normalization to perform in the subsets of data                          #
-# Training parameters -------------------------------------------------------------------------------------------------#
-experiment_name = args.exp_name     # Experiment name to define path were results are stored                           #
-lr = args.lr                        # Learning rate of the Adam optimizer (was changed from 0.001 to 0.00001)          #
-total_epochs = args.epochs          # Total number of epochs to train                                                  #
 # ---------------------------------------------------------------------------------------------------------------------#
 
 # Handle the posibility of an all vs one binary problem
 complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
-if all_vs_one=='False':
+if args.all_vs_one=='False':
     binary_dict = {}
 else:
     binary_dict = {label: 0 for label in complete_label_list}
-    binary_dict[all_vs_one] = 1
+    binary_dict[args.all_vs_one] = 1
 
 # Declare dataset
 dataset = ToilDataset(os.path.join("data", "toil_data"),
-                            dataset = dataset,
-                            tissue = tissue,
+                            dataset = args.dataset,
+                            tissue = args.tissue,
                             binary_dict=binary_dict,
-                            mean_thr = mean_thr,
-                            std_thr = std_thr,
+                            mean_thr = args.mean_thr,
+                            std_thr = args.std_thr,
                             label_type = 'phenotype',
-                            batch_normalization=batch_norm,
+                            batch_normalization=args.batch_norm,
                             partition_seed = args.seed,
                             force_compute = False)
 
 # Dataloader declaration
-train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = batch_size)
+train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = args.batch_size)
 
 
 # Calculate loss function weights
@@ -98,9 +82,11 @@ print("The model definition is:")
 print(model)
 
 # Define optimizer and criterion
-optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999))
-criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor) # TODO: Put loss weights by parameter
-# criterion = torch.nn.CrossEntropyLoss() # Temporal experiment without weights
+optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))
+if args.weights == 'True':
+    criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
+else:
+    criterion = torch.nn.CrossEntropyLoss() # Experiment without weights
 
 # Lists declarations
 train_metric_lst = []
@@ -109,7 +95,7 @@ loss_list = []
 
 # Declare results path
 # TODO: Make function that returns all the paths
-results_path = os.path.join("Results", experiment_name)
+results_path = os.path.join("Results", args.exp_name)
 # Declare log path
 train_log_path = os.path.join(results_path, "TRAINING_LOG.txt")
 # Declare metric dicts path
@@ -125,9 +111,9 @@ pr_curves_fig_path = os.path.join(results_path, "pr_curves.png")
 if not os.path.isdir(results_path):
     os.makedirs(results_path)
 
-if mode == "train":
+if args.mode == "train":
     # Train/test cycle
-    for epoch in range(total_epochs):
+    for epoch in range(args.epochs):
         print('-----------------------------------------')
         print("Epoch " + str(epoch+1) + ":")
         print('                                         ')
@@ -158,7 +144,7 @@ if mode == "train":
         print_epoch(train_metrics, val_metrics, loss, epoch, train_log_path)
 
         # Save checkpoint at last epoch
-        if epoch+1== total_epochs:
+        if epoch+1== args.epochs:
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -187,9 +173,9 @@ if mode == "train":
                         dataset.lab_txt_2_lab_num,
                         conf_matrix_fig_path)
 
-elif mode == 'test':
+elif (args.mode == 'test') or (args.mode == 'train'):
     # Declare path to load final model
-    final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(total_epochs)+".pt")
+    final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(args.epochs)+".pt")
     # Declare path to save gene ranking csv
     gene_ranking_path = os.path.join(results_path, "one_candle_gene_ranking.csv")
 
@@ -248,15 +234,21 @@ elif mode == 'test':
     # Make a datarfame of interpretation results, print it and save it to file
     rank_frec_df = pd.DataFrame({'gene_name': gene_frec_sorted, 'frec': frecuencies_sorted})
     print(rank_frec_df)
-    pd.DataFrame(rank_frec_df).to_csv('one_candle_weights.csv')
+
+    # Make directory for weights if it does not exist
+    if not os.path.exists(os.path.join('Weights')):
+        os.makedirs(os.path.join('Weights'))
+        
+    # Save weights to csv
+    pd.DataFrame(rank_frec_df).to_csv(os.path.join('Weights','1_candle_weights.csv'))
 
     # Make scatter plot of weights of a single random class
     rand_int = np.random.randint(0,33)
     threshold = sorted_tcga_weight_matrix[rand_int, k]
     plt.figure()
-    plt.plot(tcga_weight_matrix[i], '.k', markersize=2, alpha=0.4)
-    plt.plot([0, len(tcga_weight_matrix[i])],[threshold, threshold], '--r')
-    plt.plot([0, len(tcga_weight_matrix[i])],[-threshold, -threshold], '--r')
+    plt.plot(tcga_weight_matrix[rand_int], '.k', markersize=2, alpha=0.4)
+    plt.plot([0, len(tcga_weight_matrix[rand_int])],[threshold, threshold], '--r')
+    plt.plot([0, len(tcga_weight_matrix[rand_int])],[-threshold, -threshold], '--r')
     ax = plt.gca()
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -266,4 +258,9 @@ elif mode == 'test':
     plt.title(f'Weights for class {rand_int}', fontsize='xx-large')
     plt.show()
     plt.tight_layout()
-    plt.savefig('random_class_weights_plot.png', dpi=300)
+
+    # Make directory to save random weights plot
+    if not os.path.exists(os.path.join('Figures')):
+        os.makedirs(os.path.join('Figures'))
+
+    plt.savefig(os.path.join('Figures','random_class_weights_plot.png'), dpi=300)

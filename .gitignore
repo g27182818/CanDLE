@@ -1,10 +1,7 @@
 Results/
 __pycache__/
-final_dataset/
-GDCdata/
 data/
 MANIFEST.txt
 config.lintr
 .lintr
-all_vs_one.png
-figs_detection/
+

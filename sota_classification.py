@@ -12,13 +12,8 @@ from sklearn.decomposition import PCA
 from utils import *
 from model import *
 from datasets import *
-# Set matplotlib option to plot while in screen
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
-################ Temporal parser code #######################
-################ Must be replace by configs #################
+#---------------- Parser code -------------------------------------------------------------------------------------------#
 # Import the library
 import argparse
 # Create the parser
@@ -28,30 +23,23 @@ parser.add_argument('--dataset',        type=str,   default="both",         help
 parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
 parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multiclass problem, if other string solves a binary problem with this as the positive class.",  choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
 parser.add_argument('--batch_norm',     type=str,   default="none",         help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
+parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression estrictly greater.")
+parser.add_argument('--std_thr',        type=float, default=0.0,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std estrictly greater.")
+parser.add_argument('--epochs',         type=int,   default=500,            help="Number of epochs. Defaults to 500 in Hongs model.")
+parser.add_argument('--pca',            type=str,   default='False',        help="Wheter to perform PCA reduction to 2000 features as in Hong.",                                                    choices=['True', 'False'])
+
 # Parse the argument
 args = parser.parse_args()
-#############################################################
+#----------------------------------------------------------------------------------------------------------------------#
 
-# ------------------- Important variable parameters -------------------------------------------------------------------#
 # Miscellaneous parameters --------------------------------------------------------------------------------------------#
+gpu = '0'                           # GPU to train                                                                     #
 torch.manual_seed(12345)            # Set torch manual seed                                                            #
 device = torch.device("cuda")       # Set cuda device                                                                  #
-# Dataset parameters --------------------------------------------------------------------------------------------------#
-val_fraction = 0.2                  # Fraction of the data used for validation                                         #
-coor_thr = 0.6                      # Spearman correlation threshold for declaring graph topology                      #
-p_value_thr = 0.05                  # P-value Spearman correlation threshold for declaring graph topology              #
-# Model parameters ----------------------------------------------------------------------------------------------------#
-hidd = 8                            # Hidden channels parameter for baseline model                                     #
-# Training parameters -------------------------------------------------------------------------------------------------#
-metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
 # ---------------------------------------------------------------------------------------------------------------------#
 
-mean_thr = -10.0  
-std_thr = 0.0   
-use_graph = False
-epochs = 500
-pca = False
-
+# Set GPU to run code
+os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
 # Handle the posibility of an all vs one binary problem
 complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
@@ -66,11 +54,8 @@ dataset = ToilDataset(os.path.join("data", "toil_data"),
                             dataset = args.dataset,
                             tissue = args.tissue,
                             binary_dict=binary_dict,
-                            mean_thr = mean_thr,
-                            std_thr = std_thr,
-                            use_graph = use_graph,
-                            corr_thr = coor_thr,
-                            p_thr = p_value_thr,
+                            mean_thr = args.mean_thr,
+                            std_thr = args.std_thr,
                             label_type = 'phenotype',
                             batch_normalization = args.batch_norm,
                             partition_seed = 0,
@@ -166,7 +151,7 @@ class HongDataset(Dataset):
         return sample, label
 
 # Handle the possible PCA in the input
-if pca:
+if args.pca=='True':
     joint_matrix = pd.concat([dataset.split_matrices['train'], dataset.split_matrices['val'], dataset.split_matrices['test']], axis=1)
     pca = PCA(n_components=2000)
     print('Started computing PCA, this may take a few minutes...')
@@ -199,7 +184,7 @@ subtype_val_dataloader = DataLoader(subtype_val_data, batch_size=421, shuffle=Fa
 subtype_test_dataloader = DataLoader(subtype_test_data, batch_size=421, shuffle=False)
 
 # Handle input size in case we use a pca before
-input_size = 2000 if pca else len(dataset.filtered_gene_list)
+input_size = 2000 if args.pca=='True' else len(dataset.filtered_gene_list)
 
 # Create models
 hong_multitask_model = HongMultiTask(input_size = input_size).to(device)
@@ -211,7 +196,7 @@ tissue_criterion = torch.nn.CrossEntropyLoss()
 subtype_criterion = torch.nn.CrossEntropyLoss()
 
 # Handle differences in learning rates when training with PCA
-if pca:
+if args.pca=='True':
     lr_multitask, lr_subtype = 6.3e-4, 4.9e-4
 else:
     lr_multitask, lr_subtype = 6.3e-6, 4.9e-6
@@ -357,7 +342,7 @@ def test_subtask(loader, model, device):
     
     return subtype_macc, pred_subtype
 
-for i in range(epochs):
+for i in range(args.epochs):
     # Train one epoch in multitask and subtype task
     total_loss, cancer_loss, tissue_loss = train_multitask(train_dataloader, hong_multitask_model, device,
                                                             cancer_criterion, tissue_criterion, multitask_optimizer)

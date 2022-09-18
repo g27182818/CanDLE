@@ -5,18 +5,21 @@ GPU=0
 DATASET=both
 TISSUE=all
 ALL_VS_ONE=False
+MEAN_THR=-10.0
+STD_THR=0.0
 BATCH_NORM=normal
 # Training parameters #####################################
 LR=0.00001
+WEIGHTS=True
 BATCH_SIZE=100
 EPOCHS=20
-TRAIN_SAMPLES=-1
 # Paths ###################################################
-EXP_NAME=both_normal_norm_weights
+EXP_NAME=CanDLE_classification
 # Mode ####################################################
 MODE=train # train or test
 
-CUDA_VISIBLE_DEVICES=$GPU python main.py --dataset $DATASET --tissue $TISSUE --all_vs_one $ALL_VS_ONE --batch_norm $BATCH_NORM --lr $LR --batch_size $BATCH_SIZE --epochs $EPOCHS --mode $MODE --train_samples $TRAIN_SAMPLES --exp_name $EXP_NAME
+# Run main 
+CUDA_VISIBLE_DEVICES=$GPU python main.py --dataset $DATASET --tissue $TISSUE --all_vs_one $ALL_VS_ONE --mean_thr $MEAN_THR --std_thr $STD_THR --batch_norm $BATCH_NORM --lr $LR --weights $WEIGHTS --batch_size $BATCH_SIZE --epochs $EPOCHS --mode $MODE --exp_name $EXP_NAME
 
 
 

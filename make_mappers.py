@@ -89,7 +89,7 @@ phenotype_mapper = {'Adipose - Subcutaneous':                       'GTEX-ADI',
                     'Brain - Substantia Nigra':                     'GTEX-BRA',
                     'Breast - Mammary Tissue':                      'GTEX-BRE',
                     'Cells - Ebv-Transformed Lymphocytes':          'GTEX-BLO',
-                    'Cells - Leukemia Cell Line (Cml)':             'TCGA-LAML', # TODO: Know wtf to do with this category. This is a problematic category because it is GTEX but appears to be of sick patients
+                    'Cells - Leukemia Cell Line (Cml)':             'TCGA-LAML', # TODO: Know what to do with this category. This is a problematic category because it is GTEX but appears to be of sick patients
                     'Cells - Transformed Fibroblasts':              'GTEX-SKI',
                     'Cervix - Ectocervix':                          'GTEX-CER',
                     'Cervix - Endocervix':                          'GTEX-CER',
@@ -263,10 +263,6 @@ wang_normal_tcga_mapper = { 'blca': 'bladder',
                             'ucs':  'uterus'}
 
 
-# # Define a label mapper for all the values in category mapper
-# sorted_labels = sorted(category_mapper.values())
-# label_mapper = {value: i for i, value in enumerate(sorted_labels)}
-
 # Create mapper directory if there is not one
 if not os.path.exists(os.path.join("data", "toil_data", "mappers")):
     os.makedirs(os.path.join("data", "toil_data", "mappers"))
@@ -292,20 +288,3 @@ with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"
 # Save normal_tcga_mapper mappers to file
 with open(os.path.join("data", "wang_data", "mappers", "normal_tcga_2_gtex_mapper.json"), 'w') as f:
     json.dump(wang_normal_tcga_mapper, f, indent=4)
-
-
-# # Reverse id_2_tissue_mapper
-# tissue_2_id_mapper = {}
-# for key, value in id_2_tissue_mapper.items():
-#     if value not in tissue_2_id_mapper:
-#         tissue_2_id_mapper[value] = [key]
-#     else:
-#         tissue_2_id_mapper[value].append(key)
-
-# # Print tissue_2_id_mapper to terminal
-# for key, value in tissue_2_id_mapper.items(): 
-#     print(key,': ', value)
-
-# # Save label mapper to file
-# with open(os.path.join("data", "toil_data", "mappers", "lab_txt_2_lab_num_mapper.json"), 'w') as f:
-#     json.dump(label_mapper, f, indent=4)

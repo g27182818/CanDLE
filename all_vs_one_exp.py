@@ -7,17 +7,22 @@ import pickle as pkl
 import matplotlib
 from adjustText import adjust_text
 
+######################################################################
+#            You can safely change these parameters                  #
+######################################################################
 mode = 'compute' # 'compute' or 'plot'
 dataset = 'tcga' # 'tcga', 'gtex' or 'both'
-gpu = '2'
-use_weights = True # True or False
+use_weights = 'True' # 'True' or 'False'
 
-if use_weights:
-    exp_folder_name = 'all_vs_one_exp_1_epoch'
-else:
-    exp_folder_name = 'all_vs_one_exp_1_epoch_no_weights'
+gpu = '0' # What GPU to use
+######################################################################
 
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+
+if use_weights=='True':
+    exp_folder_name = 'CanDLE_all_vs_one_exp_1_epoch'
+else:
+    exp_folder_name = 'CanDLE_all_vs_one_exp_1_epoch_no_weights'
 
 # Get mapper file to know labels
 mapper_path = os.path.join('data','toil_data', 'mappers', 'category_mapper.json')
@@ -48,7 +53,7 @@ if mode == 'compute':
         # Just compute the models if they are not already computed
         if not os.path.exists(os.path.join('Results', exp_names[i])):
             # run main.py with subprocess
-            command = 'python main.py --all_vs_one {} --exp_name {} --batch_norm normal --epochs 1'.format(labels[i], exp_names[i])
+            command = f'python main.py --all_vs_one {labels[i]} --exp_name {exp_names[i]} --batch_norm normal --std_thr 0.1 --weights {use_weights} --epochs 1'
             print(command)
             command = command.split()
             subprocess.call(command)

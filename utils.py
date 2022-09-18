@@ -2,7 +2,6 @@ import sklearn.metrics
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-import torch
 import seaborn as sn
 import pandas as pd
 from tqdm import tqdm
@@ -31,12 +30,12 @@ def train(train_loader, model, device, criterion, optimizer):
         # Training cycle over the complete training batch
         for data in t_train_loader:  # Iterate in batches over the training dataset.
             t_train_loader.set_description(f"Batch {count+1}")
-            
             # Get the inputs of the model (x) and the groundtruth (y)
-            input_x, input_y = data.x.to(device), data.y.to(device)
+            input_x, input_y = data
+            input_x, input_y = input_x.to(device), input_y.to(device)
 
             # Perform a single forward pass.
-            out = model(input_x, data.edge_index.to(device), data.batch.to(device)) 
+            out = model(input_x) 
             loss = criterion(out, input_y)  # Compute the loss.
             loss.backward()  # Derive gradients.
             optimizer.step()  # Update parameters based on gradients.
@@ -53,13 +52,10 @@ def train(train_loader, model, device, criterion, optimizer):
 
 def test(loader, model, device, num_classes=34):
     """
-    This function calculates mean average precision, mean accuracy, total accuracy and the confusion
-    matrix for any classification/detection problem that consists of graph input data. This function can also test an
-    adversarial attack on the inputs.
+    This function calculates a set of metrics using a model and its inputs.
     :param loader: (torch.utils.data.DataLoader) Pytorch dataloader containing data to test.
     :param model: (torch.nn.Module) The prediction model.
     :param device: (torch.device) The CUDA or CPU device to parallelize.
-    :param metric: (str) The metric to avaluate the performance can be 'acc', 'mAP' or 'both'.
     :param num_classes: (int) Number of classes of the classification problem (Default = 34).
 
     :return: metric_result: Dictionary containing the metric results:
@@ -79,9 +75,10 @@ def test(loader, model, device, num_classes=34):
         for data in t_loader:  # Iterate in batches over the training/test dataset.
             t_loader.set_description(f"Batch {count}")
             # Get the inputs of the model (x) and the groundtruth (y)
-            input_x, input_y = data.x.to(device), data.y.to(device)
+            input_x, input_y = data
+            input_x, input_y = input_x.to(device), input_y.to(device)
             # Get the model output
-            out = model(input_x, data.edge_index.to(device), data.batch.to(device))
+            out = model(input_x)
             # Get probabilities
             prob = out.softmax(dim=1).cpu().detach().numpy()  # Finds probability for all cases
             true = input_y.cpu().numpy()
@@ -119,23 +116,24 @@ def test(loader, model, device, num_classes=34):
         metric_result["max_f1"] = np.nanmax(2 * (precision * recall) / (precision + recall))
     else:
         binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
-        AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
-        mean_AP = np.mean(AP_list)
+    
+    AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
+    mean_AP = np.mean(AP_list)
 
-        # Assign results
-        metric_result["mean_acc"] = mean_acc
-        metric_result["tot_acc"] = tot_acc
-        metric_result["conf_matrix"] = conf_matrix
-        metric_result["mean_AP"] = mean_AP
-        metric_result["AP_list"] = AP_list
+    # Assign results
+    metric_result["mean_acc"] = mean_acc
+    metric_result["tot_acc"] = tot_acc
+    metric_result["conf_matrix"] = conf_matrix
+    metric_result["mean_AP"] = mean_AP
+    metric_result["AP_list"] = AP_list
 
     return metric_result
 
 
 def print_epoch(train_dict, test_dict, loss, epoch, path):
     """
-    This function prints in terminal a table with all available metrics in all test groups (train, test, adversarial
-    test) for an specific epoch. It also write this table to the training log specified in path.
+    This function prints in terminal a table with all available metrics in all test groups (train, test) for an specific epoch.
+    It also writes this table to the training log specified in path.
     :param train_dict: (Dict) Dictionary containing the train set metrics acording to the test() function.
     :param test_dict: (Dict) Dictionary containing the test set metrics acording to the test() function.
     :param loss: (float) Mean epoch loss value.
@@ -229,7 +227,7 @@ def plot_training(train_list, val_list, loss, save_path):
 
 def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path):
     """
-    Plots a heatmap for all the important confusion matrices (train, test and adversarial test). All matrices enter as a
+    Plots a heatmap for all the important confusion matrices (train, test). All matrices enter as a
     numpy array.
     :param train_conf_mat: (numpy array) Training confusion matrix.
     :param test_conf_mat: (numpy array) Test confusion matrix.
@@ -291,11 +289,9 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     plt.close()
 
 
-# TODO: Remove pr_curve_adv_val parameter
-def plot_pr_curve(pr_curve_train, pr_curve_val, pr_curve_adv_val, save_path):
-    precision = {'train': pr_curve_train[0], 'val': pr_curve_val[0], 'adv_val': pr_curve_adv_val[0]}
-    recall = {'train': pr_curve_train[1], 'val': pr_curve_val[1], 'adv_val': pr_curve_adv_val[1]}
-    threshold = {'train': pr_curve_train[2], 'val': pr_curve_val[2], 'adv_val': pr_curve_adv_val[2]}
+def plot_pr_curve(pr_curve_train, pr_curve_val, save_path):
+    precision = {'train': pr_curve_train[0], 'val': pr_curve_val[0]}
+    recall = {'train': pr_curve_train[1], 'val': pr_curve_val[1]}
 
     plt.figure(figsize=(11, 10))
 
@@ -304,10 +300,9 @@ def plot_pr_curve(pr_curve_train, pr_curve_val, pr_curve_adv_val, save_path):
         x = np.linspace(0.01, 1.01, 499)
         y = f_score * x / (2 * x - f_score)
         (l,) = plt.plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
-        plt.annotate("$f_1={0:0.1f}$".format(f_score), xy=(0.9, y[450] + 0.02))
+        plt.annotate("$F_1={0:0.1f}$".format(f_score), xy=(0.9, y[450] + 0.02))
 
     plt.plot(recall['train'], precision['train'], color='darkorange', lw=2, label='Train')
-    plt.plot(recall['adv_val'], precision['adv_val'], color='cornflowerblue', lw=2, label='Adv. Val')
     plt.plot(recall['val'], precision['val'], color='navy', lw=2, label='Val')
     plt.xlabel('Recall', fontsize=24)
     plt.ylabel('Precision', fontsize=24)

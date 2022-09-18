@@ -1,11 +1,8 @@
 # Import of needed packages
 import numpy as np
+import matplotlib.pyplot as plt
 import os
 import torch
-from tqdm import tqdm
-import json
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
 from sklearn.preprocessing import StandardScaler
 import sklearn
 from sklearn.decomposition import PCA
@@ -15,13 +12,8 @@ import time
 from utils import *
 from model import *
 from datasets import *
-# Set matplotlib option to plot while in screen
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
-################ Temporal parser code #######################
-################ Must be replace by configs #################
+#---------------- Parser code -------------------------------------------------------------------------------------------#
 # Import the library
 import argparse
 # Create the parser
@@ -30,29 +22,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                  choices=["both", "tcga", "gtex"])
 parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
 parser.add_argument('--batch_norm',     type=str,   default="none",         help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
+parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression estrictly greater.")
+parser.add_argument('--std_thr',        type=float, default=0.1,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std estrictly greater. Is is set to 0.1 by default to make fair comparation with CanDLE")
 # Parse the argument
 args = parser.parse_args()
-#############################################################
+#----------------------------------------------------------------------------------------------------------------------#
 
-# ------------------- Important variable parameters -------------------------------------------------------------------#
-# Miscellaneous parameters --------------------------------------------------------------------------------------------#
-torch.manual_seed(12345)            # Set torch manual seed                                                            #
-device = torch.device("cuda")       # Set cuda device                                                                  #
-# Dataset parameters --------------------------------------------------------------------------------------------------#
-val_fraction = 0.2                  # Fraction of the data used for validation                                         #
-coor_thr = 0.6                      # Spearman correlation threshold for declaring graph topology                      #
-p_value_thr = 0.05                  # P-value Spearman correlation threshold for declaring graph topology              #
-# Model parameters ----------------------------------------------------------------------------------------------------#
-hidd = 8                            # Hidden channels parameter for baseline model                                     #
-# Training parameters -------------------------------------------------------------------------------------------------#
-metric = 'both'                     # Evaluation metric for experiment. Can be 'acc', 'mAP' or 'both'                  #
-# ---------------------------------------------------------------------------------------------------------------------#
 
-mean_thr = -10.0  
-std_thr = 2.0   # FIXME
-use_graph = False
-
-# Code taken from Quinn et all repository ################################
+# Adaptation of code taken from Quinn et al repository DOI: 10.3389/fgene.2019.00599 ################################
 
 def get_residuals(data,U):
     I = np.identity(data.shape[1])
@@ -107,11 +84,8 @@ for actual_label in tcga_label_list:
                                 dataset = args.dataset,
                                 tissue = args.tissue,
                                 binary_dict=binary_dict,
-                                mean_thr = mean_thr,
-                                std_thr = std_thr,
-                                use_graph = use_graph,
-                                corr_thr = coor_thr,
-                                p_thr = p_value_thr,
+                                mean_thr = args.mean_thr,
+                                std_thr = args.std_thr,
                                 label_type = 'phenotype',
                                 batch_normalization = args.batch_norm,
                                 partition_seed = 0,
@@ -133,11 +107,14 @@ for actual_label in tcga_label_list:
 
     x_train, x_val, x_test = x_train.T, x_val.T, x_test.T
 
+    # Get scores from model
     anomal_score,threshold = get_score_threshold(x_train, x_val)
 
+    # Get probabilities
     anomal_prob = (anomal_score-anomal_score.min())/(anomal_score.max()-anomal_score.min())
     anomal_prob =  1-anomal_prob
 
+    # Get and print metrics
     precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_val, anomal_prob)
     max_f1 = np.nanmax(2 * (precision * recall) / (precision + recall))
     AP = sklearn.metrics.average_precision_score(y_val, anomal_prob)
@@ -151,6 +128,7 @@ for actual_label in tcga_label_list:
     ap_list = np.hstack((ap_list, AP)) if ap_list.shape else AP
 
 
+    # Make separation plots 
     data_idx = np.arange(len(y_val))
     fig, ax = plt.subplots(figsize=(10, 10))
     plt.scatter(data_idx, anomal_score,s=3,label='normal', color='blue')
@@ -164,7 +142,10 @@ for actual_label in tcga_label_list:
     plt.legend(fontsize=18)
     plt.show()  
     fig.tight_layout()
-    fig.savefig('figs_detection/' + actual_label + '.png')
+    # Make directory to save separation plots
+    if not os.path.exists(os.path.join('Figures','sota_detection')):
+        os.makedirs(os.path.join('Figures','sota_detection'))
+    fig.savefig(os.path.join('Figures','sota_detection', actual_label + '.png'))
     plt.close(fig)
 
 

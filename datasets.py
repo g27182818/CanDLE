@@ -10,24 +10,16 @@ import torch
 import zipfile
 import gzip
 import shutil
-import networkx as nx
 from sklearn.model_selection import train_test_split
-from scipy.stats import spearmanr
-from scipy.sparse import coo_matrix
-from torch_geometric.utils import from_scipy_sparse_matrix
-from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 from utils import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
-# TODO: Remove use_graph, coor_thr, p_value_thr parameters from this class
-
 class ToilDataset():
     def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5, use_graph=False, corr_thr=0.6, p_thr=0.05,
-                label_type = 'phenotype', batch_normalization='none', partition_seed=0,
+                std_thr=0.5, label_type = 'phenotype', batch_normalization='none', partition_seed=0,
                 force_compute = False):
         self.path = path
         self.tissue = tissue
@@ -36,14 +28,10 @@ class ToilDataset():
         self.gtex = (dataset == 'gtex') or (dataset == 'both')
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
                                               'dataset='+str(dataset),
-                                              'mean_thr='+str(mean_thr)+'_std_thr='+str(std_thr),
-                                              'corr_thr='+str(corr_thr)+'_p_thr='+str(p_thr), 
+                                              'mean_thr='+str(mean_thr)+'_std_thr='+str(std_thr), 
                                               'tissue='+str(self.tissue))
         self.mean_thr = mean_thr
         self.std_thr = std_thr
-        self.use_graph = use_graph
-        self.corr_thr = corr_thr
-        self.p_thr = p_thr
         self.label_type = label_type # can be 'phenotype' or 'category'
         self.batch_normalization = batch_normalization # TODO: Just allow batch normalization under certain conditions of datasets
         self.partition_seed = partition_seed # seed for train/val/test split
@@ -69,8 +57,6 @@ class ToilDataset():
         self.make_binary_problem() # If self.binary_dict == {} this function does nothing
         # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
         self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
-        # Compute correlation graph if use_graph is True
-        self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
 
         # Define number of classes for classification
         self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
@@ -503,104 +489,32 @@ class ToilDataset():
         split_matrices = {"train": train_matrix, "val": val_matrix, "test": test_matrix, "train_val": train_val_matrix}
         # Both matrixes and labels are already shuffled
         return split_labels, split_matrices
-    
-    # TODO: Graph connectivity is beeing computed after all filtering is done (including tissue filtering). This is not ideal.
-    # This function computes a spearman correlation graph between all the genes in the train and val sets
-    def compute_graph(self):
-        
-        # Handle the case when graph is already computed
-        if os.path.exists(os.path.join(self.dataset_info_path, "graph_connectivity.csv")) and (not self.force_compute):
-            
-            print("Loading graph connectivity file from: \n\t{}".format(os.path.join(self.dataset_info_path, "graph_connectivity.csv")))
-            # Read pandas from the csv file
-            graph_df = pd.read_csv(os.path.join(self.dataset_info_path, "graph_connectivity.csv"), index_col = None)
-            # Extract edge indices and edge attrubutes from the dataframe and pass them to tensor
-            edge_indices = torch.Tensor(graph_df[["source", "target"]].values.T).type(torch.long)
-            edge_attributes = torch.Tensor(graph_df["weight"].values).type(torch.long)
 
-            print("Loading graph info file from: \n\t{}".format(os.path.join(self.dataset_info_path, "graph_info.json")))
-            with open(os.path.join(self.dataset_info_path, "graph_info.json"), "r") as f:
-                graph_info = json.load(f)
-        else:
-            print("Computing graph connectivity...")
-            # Transpose train_val matrix
-            x = self.split_matrices["train_val"].T
-            start = time.time()
-            correlation, p_value = spearmanr(x)                                                 # Compute Spearman correlation
-            end = time.time()
-            print("Time to compute spearmanr: {}".format(round(end - start, 2)))
-            valid_corr = np.abs(correlation) > self.corr_thr                                    # Filter based on the correlation threshold
-            valid_p_value = p_value < self.p_thr                                                # Filter based in p_value threshold
-            adjacency_matrix = np.logical_and(valid_corr, valid_p_value).astype(int)            # Compose both filters
-            adjacency_matrix = adjacency_matrix - np.eye(adjacency_matrix.shape[0], dtype=int)  # Discard self loops
-            adjacency_sparse = coo_matrix(adjacency_matrix)                                     # Pass to sparse matrix
-            adjacency_sparse.eliminate_zeros()                                                  # Delete zeros from representation
-            edge_indices, edge_attributes = from_scipy_sparse_matrix(adjacency_sparse)          # Get edges and weights in tensors
-            
-            # Save edge indexs and attributes to a csv file
-            graph_df = pd.DataFrame(edge_indices.T.numpy(), columns=["source", "target"])
-            graph_df["weight"] = edge_attributes.numpy()
-            # TODO: Also save the gene list with numbers to interpret the graph connectivity csv file
-            graph_df.to_csv(os.path.join(self.dataset_info_path, "graph_connectivity.csv"), index=False)
-
-            # Compute graph statistics
-            print('Computing graph info...')
-            nx_graph = nx.from_scipy_sparse_matrix(adjacency_sparse)
-            connected_bool = nx.is_connected(nx_graph)
-            length_connected = [len(c) for c in sorted(nx.connected_components(nx_graph), key=len, reverse=False)]
-            graph_info ={
-                        "Node number" : x.shape[1],
-                        "Edge number" : edge_indices.shape[1]//2,
-                        "Average degree" : round(edge_indices.shape[1]/x.shape[1], 2),
-                        "Connected" : connected_bool,
-                        "Biggest Con. Comp." : length_connected[-1]
-                        }
-            # Save normal_tcga_mapper mappers to file
-            with open(os.path.join(self.dataset_info_path, "graph_info.json"), 'w') as f:
-                json.dump(graph_info, f, indent=4)
-
-        # Print graph info dictionary
-        print("Graph info:")
-        for key, value in graph_info.items():
-            print("\t{}: {}".format(key, value))
-        return edge_indices, edge_attributes
-
-        # TODO: Add a function that handles a possible subsampling of the data
+    # TODO: Add a function that handles a possible subsampling of the data
 
     # This function gets the dataloaders for the train, val and test sets
     def get_dataloaders(self, batch_size):
-        # Cast data as tensors
+        # Select data partitions
         # These data matrices have samples in rows and genes in columns
         x_train = torch.Tensor(self.split_matrices["train"].T.values).type(torch.float)
         x_val = torch.Tensor(self.split_matrices["val"].T.values).type(torch.float)
         x_test = torch.Tensor(self.split_matrices["test"].T.values).type(torch.float)
+        
         # Cast labels as tensors
         y_train = torch.Tensor(self.split_labels["train"].values).type(torch.long)
         y_val = torch.Tensor(self.split_labels["val"].values).type(torch.long)
         y_test = torch.Tensor(self.split_labels["test"].values).type(torch.long)
-        # Define train graph list
-        train_graph_list = [Data(x=torch.unsqueeze(x_train[i, :], 1),
-                                 y=y_train[i],
-                                 edge_index=self.edge_indices,
-                                 edge_attr=self.edge_attributes,
-                                 num_nodes= len(x_train[i,:])) for i in range(x_train.shape[0])]
-        # Define val graph list
-        val_graph_list = [Data(x=torch.unsqueeze(x_val[i, :], 1),
-                               y=y_val[i],
-                               edge_index=self.edge_indices,
-                               edge_attr=self.edge_attributes,
-                               num_nodes= len(x_val[i,:])) for i in range(x_val.shape[0])]
-        # Define test graph list
-        test_graph_list = [Data(x=torch.unsqueeze(x_test[i, :], 1),
-                                y=y_test[i],
-                                edge_index=self.edge_indices,
-                                edge_attr=self.edge_attributes,
-                                num_nodes= len(x_test[i,:])) for i in range(x_test.shape[0])]
+
+        # Define train, val and test datasets
+        train_dataset = TensorDataset(x_train, y_train)
+        val_dataset = TensorDataset(x_val, y_val)
+        test_dataset = TensorDataset(x_test, y_test)
 
         # Create dataloaders
-        train_loader = DataLoader(train_graph_list, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_graph_list, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_graph_list, batch_size=batch_size, shuffle=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
         return train_loader, val_loader, test_loader
     
     # This function plots the label distribution of the dataset
@@ -705,26 +619,25 @@ class ToilDataset():
 
 
 
+# Test code for dataset declaration
 
-# test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
+#test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
 #                                 dataset = 'both', 
 #                                 tissue='all', 
 #                                 mean_thr=-10, 
 #                                 std_thr=-1.0, 
-#                                 use_graph=False, 
-#                                 corr_thr=0.6,
-#                                 p_thr=0.05,
 #                                 label_type = 'phenotype',
 #                                 batch_normalization='normal', # Can be 'none', 'normal', 'healthy_tcga'
 #                                 partition_seed=0,
 #                                 force_compute = False)
 
-# breakpoint()
+#train_loader, val_loader, test_loader = test_toil_dataset.get_dataloaders(batch_size = 100)
+
+#breakpoint()
 
 class WangDataset():
     def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5, use_graph=True, corr_thr=0.6, p_thr=0.05,
-                partition_seed=0, force_compute = False):
+                std_thr=0.5, partition_seed=0, force_compute = False):
 
         self.path = path
         self.tissue = tissue
@@ -733,14 +646,9 @@ class WangDataset():
         self.gtex = (dataset == 'gtex') or (dataset == 'both')
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
                                               'dataset='+str(dataset),
-                                              'mean_thr='+str(mean_thr)+'_std_thr='+str(std_thr),
-                                              'corr_thr='+str(corr_thr)+'_p_thr='+str(p_thr), 
                                               'tissue='+str(self.tissue))
         self.mean_thr = mean_thr
         self.std_thr = std_thr
-        self.use_graph = use_graph
-        self.corr_thr = corr_thr
-        self.p_thr = p_thr
         self.partition_seed = partition_seed # seed for train/val/test split
         self.force_compute = force_compute
 
@@ -749,27 +657,6 @@ class WangDataset():
         self.unzip_data()
         # Read data from the Toil data set
         self.matrix_data, self.categories = self.read_data()
-        # # Filter toil datasets to use GTEx, TCGA or both
-        # self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
-        # # Filter genes based on mean and std
-        # self.filtered_gene_list, self.filtering_info, self.gene_filtered_data_matrix = self.filter_genes()
-        # # Get labels and label dictionary. 
-        # self.label_df, self.lab_txt_2_lab_num = self.find_labels()
-        # # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
-        # self.filter_by_tissue()
-        # # Make the problem binary in case self.binary_dict is not empty
-        # self.make_binary_problem() # If self.binary_dict == {} this function does nothing
-        # # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
-        # self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
-        # # Compute correlation graph if use_graph is True
-        # self.edge_indices, self.edge_attributes = self.compute_graph() if self.use_graph else (torch.empty((2, 1)), torch.empty((1,)))
-
-        # # Define number of classes for classification
-        # self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
-
-        # # Make important plots with dataset characteristics
-        # self.plot_label_distribution()
-        # # self.plot_gene_expression_histograms(rand_size=100000)
 
 
     # This function unzips the raw downloaded data from 
@@ -871,8 +758,5 @@ class WangDataset():
         
         return data_matrix, category_df
 
-        
-
-    
 
 # test_wang = WangDataset(os.path.join('data', 'wang_data'))
