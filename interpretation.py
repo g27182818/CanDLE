@@ -123,4 +123,4 @@ if (mode == 'interpret') or (mode == 'compute'):
 
     rank_frec_df = pd.DataFrame({'gene_name': gene_frec_sorted, 'frec': frecuencies_sorted})
     print(rank_frec_df)
-    pd.DataFrame(rank_frec_df).to_csv(f'{num_ranges[-1]+1}_candle_weights.csv')
+    pd.DataFrame(rank_frec_df).to_csv(f'{num_ranges[-1]+1}_candle_ranking.csv')

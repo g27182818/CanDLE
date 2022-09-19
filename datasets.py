@@ -1,5 +1,4 @@
-from ast import Raise
-from pyparsing import alphas
+import subprocess
 import tqdm
 import pandas as pd
 import numpy as np
@@ -14,6 +13,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
 from utils import *
 
+# Suppress not useful warnings
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
@@ -39,6 +39,8 @@ class ToilDataset():
 
         # Main Bioinformatic pipeline
 
+        # Make mapper files if they are not already saved
+        self.make_mappers()
         # Read data from the Toil data set
         self.matrix_data, self.categories, self.phenotypes = self.read_data()
         # Filter toil datasets to use GTEx, TCGA or both
@@ -64,6 +66,18 @@ class ToilDataset():
         # Make important plots with dataset characteristics
         self.plot_label_distribution()
         # self.plot_gene_expression_histograms(rand_size=100000)
+
+    def make_mappers(self):
+        """
+        This function generates mapper files useful for class definition in the dataset by running the make_mappers.py file
+        """
+        # Just make mappers if they are not already saved
+        if not os.path.exists(os.path.join(self.path), 'mappers', 'category_mapper.json'):
+            # run main.py with subprocess
+            command = f'python make_mappers.py'
+            print(command)
+            command = command.split()
+            subprocess.call(command)    
 
     def read_data(self):
         """
@@ -397,7 +411,7 @@ class ToilDataset():
             print('Batch normalizing matrix data...')
             # Define auxiliary tcga dataframe to obtain healthy tcga samples
             tcga_df = self.label_df[self.label_df['_study']=='TCGA']
-            # Get the identidiers of the samples in each subset
+            # Get the identifiers of the samples in each subset
             gtex_samples = self.label_df[self.label_df['_study']=='GTEX'].index
             tcga_samples = tcga_df.index
             # Get stats of the valid genes
@@ -653,11 +667,24 @@ class WangDataset():
         self.force_compute = force_compute
 
         # Main Bioinformatic pipeline
-        # Uncompress data
+        # Make mapper files if they are not already saved
+        self.make_mappers()
+        # Un-compress data
         self.unzip_data()
         # Read data from the Toil data set
         self.matrix_data, self.categories = self.read_data()
 
+    def make_mappers(self):
+        """
+        This function generates mapper files useful for class definition in the dataset by running the make_mappers.py file
+        """
+        # Just make mappers if they are not already saved
+        if not os.path.exists(os.path.join(self.path), 'mappers', 'normal_tcga_2_gtex_mapper.json'):
+            # run main.py with subprocess
+            command = f'python make_mappers.py'
+            print(command)
+            command = command.split()
+            subprocess.call(command) 
 
     # This function unzips the raw downloaded data from 
     def unzip_data(self):

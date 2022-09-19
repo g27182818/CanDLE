@@ -176,8 +176,6 @@ if args.mode == "train":
 elif (args.mode == 'test') or (args.mode == 'train'):
     # Declare path to load final model
     final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(args.epochs)+".pt")
-    # Declare path to save gene ranking csv
-    gene_ranking_path = os.path.join(results_path, "one_candle_gene_ranking.csv")
 
     # Load final model dicts
     total_saved_dict = torch.load(final_model_path)
@@ -236,11 +234,11 @@ elif (args.mode == 'test') or (args.mode == 'train'):
     print(rank_frec_df)
 
     # Make directory for weights if it does not exist
-    if not os.path.exists(os.path.join('Weights')):
-        os.makedirs(os.path.join('Weights'))
+    if not os.path.exists(os.path.join('Rankings')):
+        os.makedirs(os.path.join('Rankings'))
         
     # Save weights to csv
-    pd.DataFrame(rank_frec_df).to_csv(os.path.join('Weights','1_candle_weights.csv'))
+    pd.DataFrame(rank_frec_df).to_csv(os.path.join('Rankings','1_candle_ranking.csv'))
 
     # Make scatter plot of weights of a single random class
     rand_int = np.random.randint(0,33)
