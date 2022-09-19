@@ -1,6 +1,10 @@
 # CanDLE
 
-Source code for the Cancer Diagnosis Logistic Engine (CanDLE) method. This is a research effort by the Biomedical Computer Vision gruop (BCV) of Universidad de los Andes authored by Gabriel Mejía, Natasha Bloch and Pablo Arbelaez.
+Source code for the "CanDLE: Illuminating Biases in Transcriptomic Pan-Cancer Diagnosis" paper presented in the 1st Workshop on Computational Mathematics Modeling in Cancer Analysis ([CMMCA2022](https://cmmca2022.casconf.cn/)) held at MICCAI 2022. You can consult the original video presentation in [this link](https://youtu.be/oL9W5Akdz7w). This is a research effort by the Biomedical Computer Vision gruop ([BCV](https://biomedicalcomputervision.uniandes.edu.co/)) of Universidad de los Andes authored by Gabriel Mejía, Natasha Bloch and Pablo Arbelaez.
+
+## News
+
+* *18/09/2022:* CanDLE obtained the best paper award prize in the CMMCA2022 workshop!
 
 ## Set up
 
@@ -65,6 +69,10 @@ Note:
 * There can be problems downloading the `TcgaTargetGtex_rsem_gene_tpm.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/data_matrix.feather` file should have a size of 8.62 Gb. If it does not have this size, it is recomended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
 * There can be problems downloading the `TcgaTargetGtex_gene_expected_count.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/count_matrix.feather` file should have a size of 8.61 Gb. If it does not have this size, it is recomended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_gene_expected_count.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
 
+## Automatically download [Wang et al.](https://www.nature.com/articles/sdata201861) joint TCGA/GTEx dataset
+
+This database is hosted in [this](https://doi.org/10.6084/m9.figshare.5330593) figshare link but we will download it programatically.
+
 ## Download required python dependencies for CanDLE
 
 To install all requiered dependencies run each line sequentially:
@@ -82,13 +90,13 @@ pip install sklearn
 pip install tqdm
 ```
 
-To finalize the setup run the `make mappers.py` file to save important files to create `ToilDataset` objects:
+To finalize the setup, run the `make mappers.py` file to save important files to create `ToilDataset` objects:
 
 ```bash
 python make_mappers.py
 ```
 
-## Running a single classification experiment
+## Running a single CanDLE classification experiment
 
 You can train and test CanDLE and change its main parameters using the `one_exp.sh` file. First change the mode to excecutable:
 
