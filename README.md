@@ -30,6 +30,7 @@ Open an R session in terminal to install all needed packages:
 
 ```R
 R # This should open an R session
+install.packages("rlang")
 install.packages("UCSCXenaTools") # Can take a few minutes
 install.packages('feather')
 quit() # This will end the R session you dont need to save workspace (n)
@@ -53,6 +54,7 @@ conda deactivate
 2. Install needed packages from console using:
 
     ```R
+    install.packages("rlang")
     install.packages("UCSCXenaTools") # Can take a few minutes
     install.packages('feather')
     ```
@@ -61,6 +63,7 @@ conda deactivate
 
 The installed packages are:
 
+* ***rlang*** Compatibility reasons.
 * ***UCSCXenaTools*** ([Docs](https://cran.r-project.org/web/packages/UCSCXenaTools/UCSCXenaTools.pdf)): To easily handle the download of data from the [UCSCXena Portal](https://xenabrowser.net/datapages/?cohort=TCGA%20TARGET%20GTEx&removeHub=http%3A%2F%2F127.0.0.1%3A7222).
 * ***feather*** ([Docs](https://cran.r-project.org/web/packages/feather/feather.pdf)): To store data in an efficient and fast format that can be read using pandas.
 
@@ -79,12 +82,15 @@ This database is hosted in [this](https://doi.org/10.6084/m9.figshare.5330593) f
    mkdir -p data
    cd data
    mkdir -p wang_data
+   cd wang_data
    ```
 
 2. Download data with wget:
 
    ```bash
-   wget -O raw_data https://figshare.com/ndownloader/articles/5330593/versions/2
+   wget -O raw_data.zip https://figshare.com/ndownloader/articles/5330593/versions/2
+   cd ..
+   cd ..
    ```
 
 This raw data file will be uncompressed and read by the `WangDataset()` class in the `datasets.py` file.
@@ -100,7 +106,6 @@ conda install pytorch torchvision cudatoolkit=10.2 python=3.9 -c pytorch
 pip install matplotlib
 pip install seaborn
 pip install pyarrow
-pip install networkx
 pip install adjustText
 pip install sklearn
 pip install tqdm

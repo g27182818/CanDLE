@@ -44,4 +44,4 @@ write.csv(categories, file.path("data", "toil_data", "categories.csv"))
 write.csv(phenotypes, file.path("data", "toil_data", "phenotypes.csv"))
 
 # Delete the toil_download directory
-# unlink(file.path("data", "toil_download"), recursive = TRUE, force = TRUE)
+unlink(file.path("data", "toil_download"), recursive = TRUE, force = TRUE)

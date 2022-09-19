@@ -16,7 +16,7 @@ EPOCHS=20
 # Paths ###################################################
 EXP_NAME=CanDLE_classification
 # Mode ####################################################
-MODE=train # train or test
+MODE=both # train, test or both
 
 # Run main 
 CUDA_VISIBLE_DEVICES=$GPU python main.py --dataset $DATASET --tissue $TISSUE --all_vs_one $ALL_VS_ONE --mean_thr $MEAN_THR --std_thr $STD_THR --batch_norm $BATCH_NORM --lr $LR --weights $WEIGHTS --batch_size $BATCH_SIZE --epochs $EPOCHS --mode $MODE --exp_name $EXP_NAME

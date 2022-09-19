@@ -72,7 +72,7 @@ class ToilDataset():
         This function generates mapper files useful for class definition in the dataset by running the make_mappers.py file
         """
         # Just make mappers if they are not already saved
-        if not os.path.exists(os.path.join(self.path), 'mappers', 'category_mapper.json'):
+        if not os.path.exists(os.path.join(self.path, 'mappers', 'category_mapper.json')):
             # run main.py with subprocess
             command = f'python make_mappers.py'
             print(command)
@@ -679,7 +679,7 @@ class WangDataset():
         This function generates mapper files useful for class definition in the dataset by running the make_mappers.py file
         """
         # Just make mappers if they are not already saved
-        if not os.path.exists(os.path.join(self.path), 'mappers', 'normal_tcga_2_gtex_mapper.json'):
+        if not os.path.exists(os.path.join(self.path, 'mappers', 'normal_tcga_2_gtex_mapper.json')):
             # run main.py with subprocess
             command = f'python make_mappers.py'
             print(command)

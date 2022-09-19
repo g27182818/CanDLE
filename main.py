@@ -34,7 +34,7 @@ parser.add_argument('--lr',             type=float, default=0.00001,        help
 parser.add_argument('--weights',        type=str,   default='True',         help="Wether to train CanDLE with weighted cross entropy",                                                                   choices=['True', 'False'])
 parser.add_argument('--batch_size',     type=int,   default=100,            help="Batch size")
 parser.add_argument('--epochs',         type=int,   default=20,             help="Number of epochs")
-parser.add_argument('--mode',           type=str,   default="train",        help="Train or test CanDLE model.",                                                                                          choices=['train', 'test'])
+parser.add_argument('--mode',           type=str,   default="train",        help="Train, test or do both for a CanDLE model.",                                                                           choices=['train', 'test','both'])
 parser.add_argument('--exp_name',       type=str,   default='misc_test',    help="Experiment name to save")
 # Parse the argument
 args = parser.parse_args()
@@ -173,7 +173,7 @@ if args.mode == "train":
                         dataset.lab_txt_2_lab_num,
                         conf_matrix_fig_path)
 
-elif (args.mode == 'test') or (args.mode == 'train'):
+elif (args.mode == 'test') or (args.mode == 'both'):
     # Declare path to load final model
     final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(args.epochs)+".pt")
 
@@ -192,7 +192,7 @@ elif (args.mode == 'test') or (args.mode == 'train'):
     # Obtain test metrics
     test_metrics = test(test_loader, model, device, num_classes=dataset.num_classes)
     # Print metrics
-    print('The metrics before the attack in test set are:')
+    print('The metrics in test set are:')
     print('balanced accuracy = {}'.format(test_metrics['mean_acc']))
     print('total accuracy = {}'.format(test_metrics['tot_acc']))
     print('mean average precision = {}'.format(test_metrics['mean_AP']))
@@ -231,9 +231,10 @@ elif (args.mode == 'test') or (args.mode == 'train'):
 
     # Make a datarfame of interpretation results, print it and save it to file
     rank_frec_df = pd.DataFrame({'gene_name': gene_frec_sorted, 'frec': frecuencies_sorted})
+    print('The associated gene importance ranking of this CanDLE model is:')
     print(rank_frec_df)
 
-    # Make directory for weights if it does not exist
+    # Make directory for Rankings if it does not exist
     if not os.path.exists(os.path.join('Rankings')):
         os.makedirs(os.path.join('Rankings'))
         
