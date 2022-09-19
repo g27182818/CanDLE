@@ -10,6 +10,13 @@ Source code for the "CanDLE: Illuminating Biases in Transcriptomic Pan-Cancer Di
 
 We will first download the required data and then install the needed python dependencies for CanDLE to run. It is important to note that our work approached both the [Vivian et al.](https://www.nature.com/articles/nbt.3772) (Toil) and [Wang et al.](https://www.nature.com/articles/sdata201861) joint TCGA/GTEx datasets. However, Wang data is exclusively used in the `bias_check.py` file. Consequently, if you are only interested in training and testing CanDLE we do not recommend to download the Wang et al dataset.
 
+## Cloning CanDLE repository
+
+```bash
+git clone https://github.com/g27182818/CanDLE.git
+cd CanDLE
+```
+
 ## Automatically download [UCSC Toil RNA-seq Recompute data](https://xenabrowser.net/datapages/?cohort=TCGA%20TARGET%20GTEx&removeHub=http%3A%2F%2F127.0.0.1%3A7222)
 
 The `toil_downloader.R` file downloads automatically the principal dataset needed to run CanDLE ([Vivian et al.](https://www.nature.com/articles/nbt.3772)). You can run it with R Studio or with anaconda.
