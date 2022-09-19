@@ -111,7 +111,7 @@ pr_curves_fig_path = os.path.join(results_path, "pr_curves.png")
 if not os.path.isdir(results_path):
     os.makedirs(results_path)
 
-if args.mode == "train":
+if (args.mode == "train") or (args.mode == "both"):
     # Train/test cycle
     for epoch in range(args.epochs):
         print('-----------------------------------------')
@@ -173,7 +173,7 @@ if args.mode == "train":
                         dataset.lab_txt_2_lab_num,
                         conf_matrix_fig_path)
 
-elif (args.mode == 'test') or (args.mode == 'both'):
+if (args.mode == 'test') or (args.mode == 'both'):
     # Declare path to load final model
     final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(args.epochs)+".pt")
 
