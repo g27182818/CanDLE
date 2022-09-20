@@ -13,7 +13,7 @@ from datasets import *
 # Mode of the code
 mode = 'compute' # 'compute' or 'interpret'
 num_ranges = np.arange(0, 100) # Here you can change the number of trained candle models to perform wald z test. The numbers here are the partition seeds of the datasets.
-gpu = '0' # GPU to train
+gpu = '1' # GPU to train
 ######################################################################
 
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu

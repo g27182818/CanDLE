@@ -19,7 +19,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 class ToilDataset():
     def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5, label_type = 'phenotype', batch_normalization='none', partition_seed=0,
+                std_thr=0.5,rand_frac = 1.0, label_type = 'phenotype', batch_normalization='none', partition_seed=0,
                 force_compute = False):
         self.path = path
         self.tissue = tissue
@@ -27,11 +27,13 @@ class ToilDataset():
         self.tcga = (dataset == 'tcga') or (dataset == 'both')
         self.gtex = (dataset == 'gtex') or (dataset == 'both')
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
-                                              'dataset='+str(dataset),
-                                              'mean_thr='+str(mean_thr)+'_std_thr='+str(std_thr), 
-                                              'tissue='+str(self.tissue))
+                                              f'dataset={dataset}',
+                                              f'mean_thr={mean_thr}_std_thr={std_thr}',
+                                              f'rand_frac={rand_frac}', 
+                                              f'tissue={self.tissue}')
         self.mean_thr = mean_thr
         self.std_thr = std_thr
+        self.rand_frac = rand_frac
         self.label_type = label_type # can be 'phenotype' or 'category'
         self.batch_normalization = batch_normalization # TODO: Just allow batch normalization under certain conditions of datasets
         self.partition_seed = partition_seed # seed for train/val/test split
@@ -45,7 +47,7 @@ class ToilDataset():
         self.matrix_data, self.categories, self.phenotypes = self.read_data()
         # Filter toil datasets to use GTEx, TCGA or both
         self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
-        # Filter genes based on mean and std
+        # Filter genes based on mean and std. This also subsamples the resulting filtered gene list by self.rand_frac
         self.filtered_gene_list, self.filtering_info, self.gene_filtered_data_matrix = self.filter_genes()
         # Get labels and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
@@ -186,6 +188,16 @@ class ToilDataset():
             mean_std_index = np.logical_and(mean_data_index.values, std_data_index.values).ravel()
             # Make a gene list of the samples that fulfill the thresholds
             gene_list = self.matrix_data.index[mean_std_index]
+
+            # Subsample gene list in case self.rand_frac < 1
+            if self.rand_frac < 1:
+                np.random.seed(0) # Ensure reproducibility
+                rand_selector = np.zeros(len(gene_list))
+                rand_selector[:int(len(gene_list)*self.rand_frac)] = 1
+                np.random.shuffle(rand_selector) # Shuffle boolean selector
+                rand_selector = np.array(rand_selector, dtype=bool)
+                gene_list = gene_list[rand_selector] # Filter gene list based in rand_selector
+            
             # Compute boolean value for each gene that indicates if it was included in the filtered gene list
             included_in_filtering = mean_data.index.isin(gene_list)
 
