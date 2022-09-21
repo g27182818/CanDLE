@@ -126,7 +126,7 @@ else:
     plt.hist(gtex_dist, bins=40, color='k', label='GTEx', alpha=0.8)
 plt.title('Separation Histogram', fontsize=40)
 plt.xlabel('Distance from SVM Plane', fontsize=30)
-plt.ylabel('Frecuency', fontsize=30)
+plt.ylabel('Frequency', fontsize=30)
 plt.legend(loc=2, fontsize=20)
 ax = plt.gca()
 ax.spines['top'].set_visible(False)

@@ -11,9 +11,9 @@ from datasets import *
 #            You can safely change these parameters                  #
 ######################################################################
 # Mode of the code
-mode = 'compute' # 'compute' or 'interpret'
+mode = 'interpret' # 'compute' or 'interpret'
 num_ranges = np.arange(0, 100) # Here you can change the number of trained candle models to perform wald z test. The numbers here are the partition seeds of the datasets.
-gpu = '1' # GPU to train
+gpu = '0' # GPU to train
 ######################################################################
 
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
@@ -122,5 +122,14 @@ if (mode == 'interpret') or (mode == 'compute'):
     frecuencies_sorted = frecuencies[frec_rank]
 
     rank_frec_df = pd.DataFrame({'gene_name': gene_frec_sorted, 'frec': frecuencies_sorted})
+    
+    # Print and save interpretation dataframe
     print(rank_frec_df)
     pd.DataFrame(rank_frec_df).to_csv(os.path.join("Rankings", f'{num_ranges[-1]+1}_candle_ranking.csv'))
+
+    # Get list of dataframes thresholding the frequency of gene apparition
+    thresholded_freq_df_list = [rank_frec_df[rank_frec_df['frec']>i]['gene_name'] for i in range(rank_frec_df['frec'].max())]
+    
+    # Save thresholded series to csv. Each csv has a series object of of important gene predictor for at least i cancer types
+    os.makedirs(os.path.join("Rankings", f'{num_ranges[-1]+1}_candle_thresholds'), exist_ok=True)
+    [thresholded_freq_df_list[i].to_csv(os.path.join("Rankings", f'{num_ranges[-1]+1}_candle_thresholds', f'at_least_{i+1}_cancer_types.csv')) for i in range(len(thresholded_freq_df_list))]

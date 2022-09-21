@@ -21,15 +21,19 @@ pylab.rcParams.update(params)
 #            You can safely change these parameters                  #
 ######################################################################
 # Define the type of sweep to perform
-sweep_type = 'rand_frac' # Can be mean, std, rand_frac
+sweep_type = 'candle_int' # Can be mean, std, rand_frac or candle_int
 gpu = '0' # Set GPU to train
 n = 50 # Number of sweep points
-mode = 'plot' # Can be compute or plot
+mode = 'compute' # Can be compute or plot
 # Define the sweep values to train in mean expression, std of expression and random gene subsampling
 mean_values = np.round(np.linspace(-10.0, 10.0, n), 4)
 std_values = np.round(np.linspace(-0.01, 6.0, n), 4)
 rand_frac = np.round(np.linspace(1.0, 0.001, n), 4)
+candle_int = np.arange(1, 15)
 ######################################################################
+
+# Define cuda device
+os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
 
 def sweep_exp_path_2_general_key(path):
@@ -99,9 +103,6 @@ def get_sweep_df(path):
 # Handle compute mode
 if mode == 'compute':
 
-    # Define cuda device
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpu
-
     # Define experiment names and commands for each of the three possible sweeps
     if sweep_type == 'mean':
         # Get experiment names
@@ -118,9 +119,15 @@ if mode == 'compute':
         exp_names = [os.path.join('rand_frac_sweep', f'rand_frac={round(rand_frac[i],4)}') for i in range(n)]
         # Get commands to run
         commands = [f'python main.py --mean_thr -10.0 --std_thr -0.01 --rand_frac {rand_frac[i]} --exp_name {exp_names[i]}' for i in range(n)]
+    elif sweep_type == 'candle_int':
+        # Get experiment names
+        exp_names = [os.path.join('candle_int_sweep', f'cancer_types={i}') for i in candle_int]
+        csv_paths = [os.path.join("Rankings", f'100_candle_thresholds', f'at_least_{i+1}_cancer_types.csv') for i in range(len(exp_names))]
+        # Get commands to run
+        commands = [f'python main.py --mean_thr -10.0 --std_thr -0.01 --rand_frac 1.0 --gene_list_csv {csv_paths[i]} --exp_name {exp_names[i]}' for i in range(len(exp_names))]
 
     # Make cycle to run all commands serially
-    for i in range(n):
+    for i in range(len(commands)):
         print(commands[i])
         command = commands[i].split()
         subprocess.call(command)
