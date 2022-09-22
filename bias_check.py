@@ -10,7 +10,7 @@ plt.rcParams['axes.axisbelow'] = True
 ######################################################################
 #            You can safely change these parameters                  #
 ######################################################################
-dataset_to_check = 'toil' # toil , wang or toil_norm
+dataset_to_check = 'toil_norm' # toil , wang or toil_norm
 ######################################################################
 
 # Make directory to save bias separation histograms
@@ -32,7 +32,7 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
             binary_dict[label] = 1
 
     # Define normalization
-    norm_str = 'none' if dataset_to_check=='toil' else 'normal'
+    norm_str = 'None' if dataset_to_check=='toil' else 'normal'
 
 
     # Declare dataset
@@ -41,7 +41,8 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
                                 tissue = 'all',
                                 binary_dict=binary_dict,
                                 mean_thr = -10.0,
-                                std_thr = -0.1,
+                                std_thr = 0.0,
+                                rand_frac=0.001, # FIXME: Original value 1.0
                                 label_type = 'phenotype',
                                 batch_normalization=norm_str,
                                 partition_seed = 0,
@@ -119,8 +120,8 @@ gtex_dist = dist_plane[~y_val]
 # Plot and save histogram of distances 
 plt.figure(figsize=(17,5))
 if dataset_to_check == 'toil_norm':
-    plt.hist(tcga_dist, bins=100, color='#4c8682', label='TCGA', alpha=0.8, range=(-10,10))
-    plt.hist(gtex_dist, bins=100, color='k', label='GTEx', alpha=0.8, range=(-10,10))
+    plt.hist(tcga_dist, bins=100, color='#4c8682', label='TCGA', alpha=0.8) #, range=(-10,10)
+    plt.hist(gtex_dist, bins=100, color='k', label='GTEx', alpha=0.8) # , range=(-10,10)
 else:
     plt.hist(tcga_dist, bins=40, color='#4c8682', label='TCGA', alpha=0.8)
     plt.hist(gtex_dist, bins=40, color='k', label='GTEx', alpha=0.8)
@@ -133,3 +134,9 @@ ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
 plt.tight_layout()
 plt.savefig(save_path, dpi=300)
+
+
+plt.figure()
+x_train.plot(x='ENSG00000224518.2', y='ENSG00000212498.1', kind='scatter')
+plt.savefig(os.path.join('Figures', 'test_outlier.png'), dpi=300)
+

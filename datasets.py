@@ -49,12 +49,12 @@ class ToilDataset():
         self.matrix_data, self.categories, self.phenotypes = self.read_data()
         # Filter toil datasets to use GTEx, TCGA or both
         self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
-        # Filter genes based on mean and std. This also subsamples the resulting filtered gene list by self.rand_frac
-        self.filtered_gene_list, self.gene_filtered_data_matrix = self.filter_genes()
         # Get labels and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
         # Find stats of each dataset segment
         self.general_stats = self.find_means_and_stds()
+        # Filter genes based on mean and std. This also subsamples the resulting filtered gene list by self.rand_frac
+        self.filtered_gene_list, self.gene_filtered_data_matrix = self.filter_genes()
         # Perform batch normalization this uses files saved by self.find_means_and_stds() and normalizes self.gene_filtered_data_matrix  
         self.batch_normalize()
         # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
@@ -355,7 +355,7 @@ class ToilDataset():
         if os.path.exists(os.path.join(self.path, 'general_stats.csv')):
             print('Loading general stats from '+os.path.join(self.path, 'general_stats.csv'))
             general_stats = pd.read_csv(os.path.join(self.path, 'general_stats.csv'), index_col = 0)
-        # If the stats are not computed compiute them and save them in file
+        # If the stats are not computed compute them and save them in file
         else:
             print('Computing general stats and saving to '+os.path.join(self.path, 'general_stats.csv'))
             # Define auxiliary tcga dataframe to obtain healthy tcga samples
