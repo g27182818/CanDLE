@@ -10,6 +10,7 @@ import torch
 import zipfile
 import gzip
 import shutil
+import pylab
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
 from utils import *
@@ -17,10 +18,18 @@ from utils import *
 # Suppress not useful warnings
 pd.options.mode.chained_assignment = None  # default='warn'
 
+# Set figure fontsizes
+params = {'legend.fontsize': 'large',
+         'axes.labelsize': 'x-large',
+         'axes.titlesize':'xx-large',
+         'xtick.labelsize':'large',
+         'ytick.labelsize':'large'}
+pylab.rcParams.update(params)
 
+# TODO: Add sample_frac parameter to main and one_exp
 class ToilDataset():
     def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5,rand_frac = 1.0, gene_list_csv='None', label_type = 'phenotype', 
+                std_thr=0.5,rand_frac = 1.0, sample_frac = 0.1, gene_list_csv='None', label_type = 'phenotype', 
                 batch_normalization='None', partition_seed=0, force_compute = False):
         self.path = path
         self.tissue = tissue
@@ -30,11 +39,12 @@ class ToilDataset():
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
                                               f'dataset={dataset}',
                                               f'mean_thr={mean_thr}_std_thr={std_thr}',
-                                              f'rand_frac={rand_frac}', 
+                                              f'sample_frac={sample_frac}_rand_frac={rand_frac}', 
                                               f'tissue={self.tissue}')
         self.mean_thr = mean_thr
         self.std_thr = std_thr
         self.rand_frac = rand_frac
+        self.sample_frac = sample_frac
         self.gene_list_csv = gene_list_csv
         self.label_type = label_type # can be 'phenotype' or 'category'
         self.batch_normalization = batch_normalization # TODO: Just allow batch normalization under certain conditions of datasets
@@ -47,15 +57,15 @@ class ToilDataset():
         self.make_mappers()
         # Read data from the Toil data set
         self.matrix_data, self.categories, self.phenotypes = self.read_data()
-        # Filter toil datasets to use GTEx, TCGA or both
+        # Filter toil datasets to use GTEx, TCGA or both. This part also takes out TARGET data
         self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
         # Get labels and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
         # Find stats of each dataset segment
-        self.general_stats = self.find_means_and_stds()
+        self.general_stats = self.find_general_stats()
         # Filter genes based on mean and std. This also subsamples the resulting filtered gene list by self.rand_frac
         self.filtered_gene_list, self.gene_filtered_data_matrix = self.filter_genes()
-        # Perform batch normalization this uses files saved by self.find_means_and_stds() and normalizes self.gene_filtered_data_matrix  
+        # Perform batch normalization this uses files saved by self.find_general_stats() and normalizes self.gene_filtered_data_matrix  
         self.batch_normalize()
         # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
         self.filter_by_tissue()
@@ -69,6 +79,7 @@ class ToilDataset():
 
         # Make important plots with dataset characteristics
         self.plot_label_distribution()
+        self.plot_sample_frac()
         # self.plot_gene_expression_histograms(rand_size=100000)
 
     def make_mappers(self):
@@ -161,130 +172,15 @@ class ToilDataset():
             raise ValueError("You are not selecting any dataset.")
             
         return matrix_data_filtered, categories_filtered, phenotypes_filtered
-        
-    # This function computes the mean and standard deviation of the matrix_data and filters out the samples with mean and standard deviation below the thresholds
-    def filter_genes(self):
-
-        # If there is a gene list specified by parameter then it overwrites mean, std and rand_frac filtering  
-        if self.gene_list_csv != 'None':
-            # Print user message
-            print(f'CanDLE will train with the list of genes specified in {self.gene_list_csv}')
-            gene_csv_df = pd.read_csv(self.gene_list_csv, index_col=0)
-            gene_list = pd.Index(gene_csv_df['gene_name'])
-        
-        # If no list of genes is specified then proceed with mean, std and rand_frac filtering
-        elif (not os.path.exists(self.dataset_info_path)) or self.force_compute:
-            print("Computing mean, std and list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
-            # Make directory if it does not exist
-            os.makedirs(self.dataset_info_path, exist_ok = True)
-            # Compute the mean and standard deviation of the matrix_data if they do not exist
-            if (not os.path.exists(os.path.join(self.path, "mean_expression.csv"))) or (not os.path.exists(os.path.join(self.path, "std_expression.csv"))) or self.force_compute:
-                tqdm.pandas(desc="Computing Mean expression")
-                mean_data = self.matrix_data.progress_apply(np.mean, axis = 1).to_frame(name='mean')
-                tqdm.pandas(desc="Computing Standard Deviation of expression")
-                std_data = self.matrix_data.progress_apply(np.std, axis = 1).to_frame(name='std')
-
-                # Save the mean and std to a csv file
-                mean_data.to_csv(os.path.join(self.path, "mean_expression.csv"))
-                std_data.to_csv(os.path.join(self.path, "std_expression.csv"))
-            # Load the mean and std from csv files if they exist
-            else:
-                mean_data = pd.read_csv(os.path.join(self.path, "mean_expression.csv"), index_col = 0)
-                std_data = pd.read_csv(os.path.join(self.path, "std_expression.csv"), index_col = 0)
-            
-            # Find the indices of the samples with mean and standard deviation that fulfill the thresholds
-            mean_data_index = mean_data > self.mean_thr
-            std_data_index = std_data > self.std_thr
-            # Compute intersection of mean_data_index and std_data_index
-            mean_std_index = np.logical_and(mean_data_index.values, std_data_index.values).ravel()
-            # Make a gene list of the samples that fulfill the thresholds
-            gene_list = self.matrix_data.index[mean_std_index]
-
-            # Subsample gene list in case self.rand_frac < 1
-            if self.rand_frac < 1:
-                np.random.seed(0) # Ensure reproducibility
-                rand_selector = np.zeros(len(gene_list))
-                rand_selector[:int(len(gene_list)*self.rand_frac)] = 1
-                np.random.shuffle(rand_selector) # Shuffle boolean selector
-                rand_selector = np.array(rand_selector, dtype=bool)
-                gene_list = gene_list[rand_selector] # Filter gene list based in rand_selector
-            
-            # Compute boolean value for each gene that indicates if it was included in the filtered gene list
-            included_in_filtering = mean_data.index.isin(gene_list)
-
-            # Merge the mean, std and included_in_filtering into a final dataframe
-            filtering_info_df = pd.DataFrame({"mean": mean_data['mean'], "std": std_data['std'], "included": included_in_filtering})
-            filtering_info_df.index.name = "gene"
-
-            # Save the gene list, mean and standard deviation of the matrix_data to files
-            filtering_info_df.to_csv(os.path.join(self.dataset_info_path, "filtering_info.csv"), index = True)
-            # Plot histograms with plot_filtering_histograms()
-            self.plot_filtering_histograms(filtering_info_df)
-
-        else:
-            print("Loading filtering info from:\n\t" + os.path.join(self.dataset_info_path, "filtering_info.csv"))
-            filtering_info_df = pd.read_csv(os.path.join(self.dataset_info_path, "filtering_info.csv"), index_col = 0)
-            # get indices of filtering_info_df that are True in the included column
-            gene_list = filtering_info_df.index[filtering_info_df["included"].values == True]
-            # Plot histograms with plot_filtering_histograms()
-            self.plot_filtering_histograms(filtering_info_df)
-        
-        # Filter tha data matrix based on the gene list
-        gene_filtered_data_matrix = self.matrix_data_filtered.loc[gene_list, :]
-
-        print("Currently working with {} genes...".format(gene_filtered_data_matrix.shape[0]))
-
-        return gene_list.to_list(), gene_filtered_data_matrix
-
-    # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
-    def plot_filtering_histograms(self, filtering_info_df):        
-        # Make a figure
-        fig, axes = plt.subplots(2, 2, figsize = (18, 12))
-        fig.suptitle("Filtering of Mean > " +str(self.mean_thr) + " and Standard Deviation > " + str(self.std_thr) , fontsize = 30)
-        # Variable to adjust display height of the histograms
-        max_hist = np.zeros((2, 2))
-
-        # Plot the histograms of mean and standard deviation before filtering
-        n, _, _ = axes[0, 0].hist(filtering_info_df["mean"], bins = 50, color = "k", density=True)
-        max_hist[0, 0] = np.max(n)
-        axes[0, 0].set_title("Before filtering", fontsize = 26)        
-        n, _, _ = axes[1, 0].hist(filtering_info_df["std"], bins = 50, color = "k", density=True)
-        max_hist[1, 0] = np.max(n)
-        # Plot the histograms of mean and standard deviation after filtering
-        n, _, _ = axes[0, 1].hist(filtering_info_df["mean"][filtering_info_df["included"]==True], bins = 50, color = "k", density=True)
-        max_hist[0, 1] = np.max(n)
-        axes[0, 1].set_title("After filtering", fontsize = 26)
-        n, _, _ = axes[1, 1].hist(filtering_info_df["std"][filtering_info_df["included"]==True], bins = 50, color = "k", density=True)
-        max_hist[1, 1] = np.max(n)
-
-        # Format axes
-        for i in range(2):
-            for j in range(2):
-                axes[i, j].set_ylabel("Density", fontsize = 16)
-                axes[i, j].tick_params(labelsize = 14)
-                axes[i, j].grid(True)
-                axes[i, j].set_axisbelow(True)
-                axes[i, j].set_ylim(0, max_hist[i, j] * 1.1)
-                # Handle mean expression plots
-                if i == 0:
-                    axes[i, j].set_xlabel("Mean expression", fontsize = 16)
-                    axes[i, j].set_xlim(filtering_info_df["mean"].min(), filtering_info_df["mean"].max())
-                    axes[i, j].plot([self.mean_thr, self.mean_thr], [0, 1.2*max_hist[i,j]], color = "r", linestyle = "--")
-                # Handle standard deviation plots
-                else:
-                    axes[i, j].set_xlabel("Standard deviation", fontsize = 16)
-                    axes[i, j].set_xlim(filtering_info_df["std"].min(), filtering_info_df["std"].max())
-                    axes[i, j].plot([self.std_thr, self.std_thr], [0, 1.2*max_hist[i,j]], color = "r", linestyle = "--")
-
-        # Save the figure
-        fig.savefig(os.path.join(self.dataset_info_path, "filtering_histograms.png"), dpi = 300)
-        plt.close(fig)
 
     # This function extracts the labels from categories_filtered or phenotypes_filtered and returns a list of labels and a dictionary of categories to labels
     def find_labels(self):
         # Load mapper dict from normal TCGA samples to GTEX category
         with open(os.path.join(self.path, "mappers", "normal_tcga_2_gtex_mapper.json"), "r") as f:
             normal_tcga_2_gtex = json.load(f)
+
+        # Make dataset directory if it does not exist
+        os.makedirs(self.dataset_info_path, exist_ok = True)
 
         if self.label_type == 'category':
             label_df = self.categories_filtered
@@ -350,9 +246,9 @@ class ToilDataset():
         return label_df, lab_txt_2_lab_num
     
     # This function find the mean expression and std for GTEx, TCGA, healthy TCGA and the joint dataset
-    def find_means_and_stds(self):
+    def find_general_stats(self):
         # If the info stats are already computed load them from file
-        if os.path.exists(os.path.join(self.path, 'general_stats.csv')):
+        if (os.path.exists(os.path.join(self.path, 'general_stats.csv'))) & (self.force_compute == False):
             print('Loading general stats from '+os.path.join(self.path, 'general_stats.csv'))
             general_stats = pd.read_csv(os.path.join(self.path, 'general_stats.csv'), index_col = 0)
         # If the stats are not computed compute them and save them in file
@@ -361,7 +257,7 @@ class ToilDataset():
             # Define auxiliary tcga dataframe to obtain healthy tcga samples
             tcga_df = self.label_df[self.label_df['_study']=='TCGA']
 
-            # Get the identidiers of the samples in each subset
+            # Get the identifiers of the samples in each subset
             gtex_samples = self.label_df[self.label_df['_study']=='GTEX'].index
             tcga_samples = tcga_df.index
             healthy_tcga_samples = tcga_df[tcga_df['lab_txt'].str.contains('GTEX')].index
@@ -369,61 +265,144 @@ class ToilDataset():
 
             # Compute the mean of the subsets
             tqdm.pandas(desc="Computing Mean GTEx")
-            gtex_mean = self.matrix_data.loc[:, gtex_samples].progress_apply(np.mean, axis = 1).to_frame(name='gtex_mean')
+            gtex_mean = self.matrix_data_filtered.loc[:, gtex_samples].progress_apply(np.mean, axis = 1).to_frame(name='gtex_mean')
             tqdm.pandas(desc="Computing Mean TCGA")
-            tcga_mean = self.matrix_data.loc[:, tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='tcga_mean')
+            tcga_mean = self.matrix_data_filtered.loc[:, tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='tcga_mean')
             tqdm.pandas(desc="Computing Mean Healthy TCGA")
-            healthy_tcga_mean = self.matrix_data.loc[:, healthy_tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='healthy_tcga_mean')
+            healthy_tcga_mean = self.matrix_data_filtered.loc[:, healthy_tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='healthy_tcga_mean')
             tqdm.pandas(desc="Computing Joint Mean")
-            joint_mean = self.matrix_data.loc[:, joint_samples].progress_apply(np.mean, axis = 1).to_frame(name='joint_mean')
+            joint_mean = self.matrix_data_filtered.loc[:, joint_samples].progress_apply(np.mean, axis = 1).to_frame(name='joint_mean')
 
             # Compute the std of the subsets
             tqdm.pandas(desc="Computing std GTEx")
-            gtex_std = self.matrix_data.loc[:, gtex_samples].progress_apply(np.std, axis = 1).to_frame(name='gtex_std')
+            gtex_std = self.matrix_data_filtered.loc[:, gtex_samples].progress_apply(np.std, axis = 1).to_frame(name='gtex_std')
             tqdm.pandas(desc="Computing std TCGA")
-            tcga_std = self.matrix_data.loc[:, tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='tcga_std')
+            tcga_std = self.matrix_data_filtered.loc[:, tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='tcga_std')
             tqdm.pandas(desc="Computing std Healthy TCGA")
-            healthy_tcga_std = self.matrix_data.loc[:, healthy_tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='healthy_tcga_std')
+            healthy_tcga_std = self.matrix_data_filtered.loc[:, healthy_tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='healthy_tcga_std')
             tqdm.pandas(desc="Computing Joint std")
             joint_std = self.matrix_data.loc[:, joint_samples].progress_apply(np.std, axis = 1).to_frame(name='joint_std')
 
+            # Compute the fraction of samples where a gene is expressed
+            print('Computing fraction of samples where each gene is expressed ...')
+            min_val = self.matrix_data_filtered.min().min() # Get minimum value
+            expressed_matrix = self.matrix_data_filtered > min_val # Compute expressed positions
+            sample_fraction = expressed_matrix.sum(axis=1)/expressed_matrix.shape[1] # Compute expression fraction
+            sample_fraction.name = 'sample_frac'
+
             # Join stats in single dataframe
-            general_stats = pd.concat([gtex_mean, tcga_mean, healthy_tcga_mean, joint_mean, gtex_std, tcga_std, healthy_tcga_std, joint_std], axis=1)
+            general_stats = pd.concat([gtex_mean, tcga_mean, healthy_tcga_mean, joint_mean, gtex_std, tcga_std, healthy_tcga_std, joint_std, sample_fraction], axis=1)
             general_stats.to_csv(os.path.join(self.path, 'general_stats.csv'))
 
-            return general_stats
-
-        # Make histogram plot
-        log_bool = False
-        density_bool = False
-        alpha_hist = 0.7
-        colors = [plt.cm.magma(0.8), plt.cm.magma(0.6), plt.cm.magma(0.4), plt.cm.magma(0.2)]
-        plt.rcParams['axes.axisbelow'] = True
-        plt.figure(figsize=(16, 6))
-        plt.subplot(1,2,1)
-        general_stats['joint_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[0], alpha=alpha_hist, histtype='stepfilled')
-        general_stats['gtex_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[1], alpha=alpha_hist, histtype='stepfilled')
-        general_stats['tcga_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[2], alpha=alpha_hist, histtype='stepfilled')
-        general_stats['healthy_tcga_mean'].hist(bins=100, density=density_bool, log=log_bool, color=colors[3], alpha=alpha_hist, histtype='stepfilled')
-        plt.title('Mean Expression', fontsize=24)
-        plt.xlabel('Mean Gene Expression $[\log_2(TPM+0.001)]$', fontsize=18)
-        plt.ylabel('Frecuency', fontsize=18)
-        plt.legend(['Joint', 'GTEx', 'TCGA', 'Healthy TCGA'], fontsize=12)
-        plt.xlim([-10,10])
-        plt.subplot(1,2,2)
-        general_stats['joint_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[0], alpha=alpha_hist, histtype='stepfilled')
-        general_stats['gtex_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[1], alpha=alpha_hist, histtype='stepfilled')
-        general_stats['tcga_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[2], alpha=alpha_hist, histtype='stepfilled')
-        general_stats['healthy_tcga_std'].hist(bins=100, density=density_bool, log=log_bool, color=colors[3], alpha=alpha_hist, histtype='stepfilled')
-        plt.title('Standard Deviation of Expression', fontsize=24)
-        plt.xlabel('Std Gene Expression', fontsize=18)
-        plt.ylabel('Frecuency', fontsize=18)
-        plt.legend(['Joint', 'GTEx', 'TCGA', 'Healthy TCGA'], fontsize=12)
-        plt.xlim([0,6])
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.path, 'subset_histograms.png'), dpi=300)
-
         return general_stats
+
+    # This function computes the mean and standard deviation of the matrix_data and filters out the samples with mean and standard deviation below the thresholds
+    def filter_genes(self):
+
+        # If there is a gene list specified by parameter then it overwrites mean, std and rand_frac filtering  
+        if self.gene_list_csv != 'None':
+            # Print user message
+            print(f'CanDLE will train with the list of genes specified in {self.gene_list_csv}')
+            gene_csv_df = pd.read_csv(self.gene_list_csv, index_col=0)
+            gene_list = pd.Index(gene_csv_df['gene_name'])
+        
+        # If no list of genes is specified then proceed with mean, std, sample_frac and rand_frac filtering
+        elif (not os.path.exists(os.path.join(self.dataset_info_path, "filtering_info.csv"))) or self.force_compute:
+            
+            print("Computing mean, std and list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
+            
+            # Find the indices of the samples with mean, standard deviation and sample fractions that fulfill the thresholds
+            mean_bool_index = ((self.general_stats['joint_mean']>self.mean_thr) & (self.general_stats['gtex_mean']>self.mean_thr) & (self.general_stats['joint_mean']>self.mean_thr))
+            std_bool_index = ((self.general_stats['joint_std']>self.std_thr) & (self.general_stats['gtex_std']>self.std_thr) & (self.general_stats['joint_std']>self.std_thr))
+            sample_frac_bool_index = self.general_stats['sample_frac'] > self.sample_frac
+            
+            # Compute intersection of mean_data_index and std_data_index
+            mean_std_sample_index = np.logical_and.reduce((mean_bool_index.values, std_bool_index.values, sample_frac_bool_index)).ravel()
+            # Make a gene list of the samples that fulfill the thresholds
+            gene_list = self.matrix_data.index[mean_std_sample_index]
+
+            # Subsample gene list in case self.rand_frac < 1
+            if self.rand_frac < 1:
+                np.random.seed(0) # Ensure reproducibility
+                rand_selector = np.zeros(len(gene_list))
+                rand_selector[:int(len(gene_list)*self.rand_frac)] = 1
+                np.random.shuffle(rand_selector) # Shuffle boolean selector
+                rand_selector = np.array(rand_selector, dtype=bool)
+                gene_list = gene_list[rand_selector] # Filter gene list based in rand_selector
+            
+            # Compute boolean value for each gene that indicates if it was included in the filtered gene list
+            included_in_filtering = self.general_stats.index.isin(gene_list)
+
+            # Merge the mean, std and included_in_filtering into a final dataframe
+            filtering_info_df = self.general_stats
+            filtering_info_df['included'] = included_in_filtering
+            filtering_info_df.index.name = "gene"
+
+            # Save the gene list, mean and standard deviation of the matrix_data to files
+            filtering_info_df.to_csv(os.path.join(self.dataset_info_path, "filtering_info.csv"), index = True)
+            # Plot histograms with plot_filtering_histograms()
+            self.plot_filtering_histograms(filtering_info_df)
+
+        else:
+            print("Loading filtering info from:\n\t" + os.path.join(self.dataset_info_path, "filtering_info.csv"))
+            filtering_info_df = pd.read_csv(os.path.join(self.dataset_info_path, "filtering_info.csv"), index_col = 0)
+            # get indices of filtering_info_df that are True in the included column
+            gene_list = filtering_info_df.index[filtering_info_df["included"].values == True]
+            # Plot histograms with plot_filtering_histograms()
+            self.plot_filtering_histograms(filtering_info_df)
+        
+        # Filter tha data matrix based on the gene list
+        gene_filtered_data_matrix = self.matrix_data_filtered.loc[gene_list, :]
+
+        print("Currently working with {} genes...".format(gene_filtered_data_matrix.shape[0]))
+
+        return gene_list.to_list(), gene_filtered_data_matrix
+    
+
+    # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
+    def plot_filtering_histograms(self, filtering_info_df):        
+        # Make a figure
+        fig, axes = plt.subplots(2, 2, figsize = (18, 12))
+        fig.suptitle("Filtering of Mean > " +str(self.mean_thr) + " and Standard Deviation > " + str(self.std_thr) , fontsize = 30)
+        # Variable to adjust display height of the histograms
+        max_hist = np.zeros((2, 2))
+
+        # Plot the histograms of mean and standard deviation before filtering
+        n, _, _ = axes[0, 0].hist(filtering_info_df["joint_mean"], bins = 50, color = "k", density=True)
+        max_hist[0, 0] = np.max(n)
+        axes[0, 0].set_title("Before filtering", fontsize = 26)        
+        n, _, _ = axes[1, 0].hist(filtering_info_df["joint_std"], bins = 50, color = "k", density=True)
+        max_hist[1, 0] = np.max(n)
+        # Plot the histograms of mean and standard deviation after filtering
+        n, _, _ = axes[0, 1].hist(filtering_info_df["joint_mean"][filtering_info_df["included"]==True], bins = 50, color = "k", density=True)
+        max_hist[0, 1] = np.max(n)
+        axes[0, 1].set_title("After filtering", fontsize = 26)
+        n, _, _ = axes[1, 1].hist(filtering_info_df["joint_std"][filtering_info_df["included"]==True], bins = 50, color = "k", density=True)
+        max_hist[1, 1] = np.max(n)
+
+        # Format axes
+        for i in range(2):
+            for j in range(2):
+                axes[i, j].set_ylabel("Density", fontsize = 16)
+                axes[i, j].tick_params(labelsize = 14)
+                axes[i, j].grid(True)
+                axes[i, j].set_axisbelow(True)
+                axes[i, j].set_ylim(0, max_hist[i, j] * 1.1)
+                # Handle mean expression plots
+                if i == 0:
+                    axes[i, j].set_xlabel("Mean expression", fontsize = 16)
+                    axes[i, j].set_xlim(filtering_info_df["joint_mean"].min(), filtering_info_df["joint_mean"].max())
+                    axes[i, j].plot([self.mean_thr, self.mean_thr], [0, 1.2*max_hist[i,j]], color = "r", linestyle = "--")
+                # Handle standard deviation plots
+                else:
+                    axes[i, j].set_xlabel("Standard deviation", fontsize = 16)
+                    axes[i, j].set_xlim(filtering_info_df["joint_std"].min(), filtering_info_df["joint_std"].max())
+                    axes[i, j].plot([self.std_thr, self.std_thr], [0, 1.2*max_hist[i,j]], color = "r", linestyle = "--")
+
+        # Save the figure
+        fig.savefig(os.path.join(self.dataset_info_path, "filtering_histograms.png"), dpi = 300)
+        plt.close(fig)
+
 
     # This function performs a data normalization 
     def batch_normalize(self):
@@ -443,21 +422,15 @@ class ToilDataset():
             # Transforms GTEx data
             normalized_gtex = self.gene_filtered_data_matrix[gtex_samples].sub(valid_stats['gtex_mean'], axis=0)
             normalized_gtex = normalized_gtex.div(valid_stats['gtex_std'], axis=0)
-            # This ensures the numerical stability of normalization zeroing genes with std bellow 10^(-8).
-            normalized_gtex[normalized_gtex.T.mean()>1e-8] = 0.0 
            
            # Transform TCGA data according to self.batch_normalization
             if self.batch_normalization=='normal':
                 normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['tcga_mean'], axis=0)
                 normalized_tcga = normalized_tcga.div(valid_stats['tcga_std'], axis=0)
-                # This ensures the numerical stability of normalization zeroing genes with std bellow 10^(-8).
-                normalized_tcga[normalized_tcga.T.mean()>1e-8] = 0.0 
             
             elif self.batch_normalization=='healthy_tcga':
                 normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['healthy_tcga_mean'], axis=0)
                 normalized_tcga = normalized_tcga.div(valid_stats['healthy_tcga_std'], axis=0)
-                # This ensures the numerical stability of normalization zeroing genes with std bellow 10^(-8).
-                normalized_tcga[normalized_tcga.T.mean()>1e-8] = 0.0
             
             else:
                 raise ValueError('Batch normalization should be None, normal or healthy_tcga.')
@@ -623,6 +596,7 @@ class ToilDataset():
     
     # This funtion makes histograms of the gene expression values for each dataset Gtex and TCGA
     def plot_gene_expression_histograms(self, rand_size=10000):
+
         # Get just GTEx  and just TCGA matrices
         gtex_matrix = self.matrix_data.iloc[:, self.matrix_data.columns.str.contains("GTEX")]
         tcga_matrix = self.matrix_data.iloc[:, self.matrix_data.columns.str.contains("TCGA")]
@@ -651,7 +625,19 @@ class ToilDataset():
         plt.savefig(os.path.join(self.dataset_info_path, "gene_expression_histograms.png"), dpi=300)
         plt.close()
 
-        
+    # This function plots an histogram of the fraction of samples that express each gene
+    def plot_sample_frac(self):
+        plt.figure()
+        ax = self.general_stats['sample_frac'].hist(bins=100, grid=False, color='darkcyan')
+        plt.title('Fraction of Samples Where\nGene is Expressed')
+        plt.xlabel('Sample Fraction')
+        plt.ylabel('Frequency')
+        plt.xlim([0,1])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.path, 'expressed_sample_fraction_hist.png'))
+        plt.close()          
 
 
 

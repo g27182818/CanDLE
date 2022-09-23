@@ -1,4 +1,5 @@
 from sklearn.svm import LinearSVC
+from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from datasets import *
@@ -41,8 +42,8 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
                                 tissue = 'all',
                                 binary_dict=binary_dict,
                                 mean_thr = -10.0,
-                                std_thr = 0.0,
-                                rand_frac=0.001, # FIXME: Original value 1.0
+                                std_thr = 0.0, # FIXME: Evaluate setting it to 0.1
+                                rand_frac=1.0,
                                 label_type = 'phenotype',
                                 batch_normalization=norm_str,
                                 partition_seed = 0,
@@ -59,7 +60,22 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
     x_val = data['val'].T
     y_val = labels['val'].index.str.contains('TCGA')
 
-    clf = LinearSVC(random_state=0, verbose=4, max_iter=100000)
+    # breakpoint()
+
+    # plt.figure()
+    # ax = x_train.loc[y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', xlim=(-0.1,0.1), ylim = (-0.1,0.1), c='#4c8682')
+    # x_train.loc[~y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', xlim=(-0.1,0.1), ylim = (-0.1,0.1), c = 'k', ax=ax)
+    # plt.savefig(os.path.join('Figures', 'test_outlier.png'), dpi=300)
+
+    # # x_train.plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', c = 'k') #  xlim=(-0.1,0.1), ylim = (-0.1,0.1),
+    # breakpoint()
+
+    # Assign classifier depending on the dataset
+    if dataset_to_check=='toil':
+        clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
+    else:
+        clf = SGDClassifier(max_iter=1000, verbose=2, n_jobs=-1, random_state=0, validation_fraction=0.1)
+
     clf.fit(x_train, y_train)
 
     # Get predictions
@@ -69,8 +85,6 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
     # Define save path for histogram
     save_path = 'toil_svm_distance.png' if dataset_to_check=='toil' else 'normalized_toil_svm_distance.png'
     save_path = os.path.join('Figures', save_path)
-
-
 
 elif dataset_to_check=='wang':
 
@@ -93,7 +107,7 @@ elif dataset_to_check=='wang':
     y_train = np.ravel(y_train.values)
     y_val = np.ravel(y_val.values)
 
-    clf = LinearSVC(random_state=0, verbose=4, max_iter=100000)
+    clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
     clf.fit(x_train, y_train)
 
     # Get predictions
@@ -120,8 +134,8 @@ gtex_dist = dist_plane[~y_val]
 # Plot and save histogram of distances 
 plt.figure(figsize=(17,5))
 if dataset_to_check == 'toil_norm':
-    plt.hist(tcga_dist, bins=100, color='#4c8682', label='TCGA', alpha=0.8) #, range=(-10,10)
-    plt.hist(gtex_dist, bins=100, color='k', label='GTEx', alpha=0.8) # , range=(-10,10)
+    plt.hist(tcga_dist, bins=100, color='#4c8682', label='TCGA', alpha=0.8) # , range=(-0.004,0.01) #, range=(-10,10)
+    plt.hist(gtex_dist, bins=100, color='k', label='GTEx', alpha=0.8) # , range=(-0.004,0.01) # , range=(-10,10)
 else:
     plt.hist(tcga_dist, bins=40, color='#4c8682', label='TCGA', alpha=0.8)
     plt.hist(gtex_dist, bins=40, color='k', label='GTEx', alpha=0.8)
@@ -134,9 +148,9 @@ ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
 plt.tight_layout()
 plt.savefig(save_path, dpi=300)
+plt.close()
 
 
-plt.figure()
-x_train.plot(x='ENSG00000224518.2', y='ENSG00000212498.1', kind='scatter')
-plt.savefig(os.path.join('Figures', 'test_outlier.png'), dpi=300)
+
+
 
