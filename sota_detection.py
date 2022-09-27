@@ -21,9 +21,12 @@ parser = argparse.ArgumentParser()
 # Add an argument
 parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                  choices=["both", "tcga", "gtex"])
 parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
-parser.add_argument('--batch_norm',     type=str,   default="none",         help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
+parser.add_argument('--batch_norm',     type=str,   default="normal",         help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
 parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression estrictly greater.")
-parser.add_argument('--std_thr',        type=float, default=0.1,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std estrictly greater. Is is set to 0.1 by default to make fair comparation with CanDLE")
+parser.add_argument('--std_thr',        type=float, default=0.0,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std estrictly greater. Is is set to 0.1 by default to make fair comparation with CanDLE")
+parser.add_argument('--rand_frac',      type=float, default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
+parser.add_argument('--sample_frac',    type=float, default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
+parser.add_argument('--gene_list_csv',  type=str,   default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
 # Parse the argument
 args = parser.parse_args()
 #----------------------------------------------------------------------------------------------------------------------#
@@ -64,13 +67,11 @@ def get_score_threshold(X_train, X_test):
     return residuals, Qbeta
 
 
-# Handle the posibility of an all vs one binary problem
+# Handle the possibility of an all vs one binary problem
 complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
 tcga_label_list = [lab for lab in complete_label_list if 'TCGA' in lab]
 
-# # Test code
-# tcga_label_list = tcga_label_list[:3]
-
+# Empty max f1 and AP arrays
 max_f1_list = np.array([])
 ap_list = np.array([])
 
@@ -86,8 +87,11 @@ for actual_label in tcga_label_list:
                                 binary_dict=binary_dict,
                                 mean_thr = args.mean_thr,
                                 std_thr = args.std_thr,
+                                rand_frac = args.rand_frac,
+                                sample_frac=args.sample_frac,
+                                gene_list_csv = args.gene_list_csv,
                                 label_type = 'phenotype',
-                                batch_normalization = args.batch_norm,
+                                batch_normalization=args.batch_norm,
                                 partition_seed = 0,
                                 force_compute = False)
 
@@ -101,7 +105,7 @@ for actual_label in tcga_label_list:
     x_val, x_test = dataset.split_matrices['val'], dataset.split_matrices['test']
     y_val, y_test = dataset.split_labels['val'], dataset.split_labels['test']
 
-    # Filter training matrix to get just possitive samples
+    # Filter training matrix to get just positive samples
     x_train = dataset.split_matrices['train'].loc[:,(y_train==1).tolist()]
     y_train = dataset.split_labels['train'][(y_train==1).tolist()]
 
@@ -150,7 +154,7 @@ for actual_label in tcga_label_list:
 
 
 print('Global results :')
-print('max F1: {:.3f} | AP: {:.3f}'.format(np.mean(max_f1_list),np.mean(ap_list)))
+print('mean max F1: {:.3f} | mean AP: {:.3f}'.format(np.mean(max_f1_list),np.mean(ap_list)))
 
 
 

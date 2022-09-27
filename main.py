@@ -1,4 +1,5 @@
 # Import of needed packages
+from random import sample
 import numpy as np
 import os
 import torch
@@ -28,6 +29,7 @@ parser.add_argument('--batch_norm',     type=str,   default="normal",       help
 parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression strictly greater.")
 parser.add_argument('--std_thr',        type=float, default=0.0,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std strictly greater.")
 parser.add_argument('--rand_frac',      type=float, default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
+parser.add_argument('--sample_frac',    type=float, default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
 parser.add_argument('--gene_list_csv',  type=str,   default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
 parser.add_argument('--seed',           type=int,   default=0,              help="Partition seed to divide tha data. Default is 0.")
 
@@ -64,6 +66,7 @@ dataset = ToilDataset(os.path.join("data", "toil_data"),
                             mean_thr = args.mean_thr,
                             std_thr = args.std_thr,
                             rand_frac = args.rand_frac,
+                            sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,
                             label_type = 'phenotype',
                             batch_normalization=args.batch_norm,
@@ -76,8 +79,8 @@ train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = arg
 
 # Calculate loss function weights
 distribution = np.bincount(np.ravel(dataset.split_labels["train_val"].values).astype(np.int64))
-loss_wieghts = 2500000 / (distribution**2)
-lw_tensor = torch.tensor(loss_wieghts, dtype=torch.float).to(device)
+loss_weights = 2500000 / (distribution**2)
+lw_tensor = torch.tensor(loss_weights, dtype=torch.float).to(device)
 
 # Model definition
 model = MLP([len(dataset.filtered_gene_list)], out_size = dataset.num_classes ).to(device)

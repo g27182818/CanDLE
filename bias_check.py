@@ -42,8 +42,9 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
                                 tissue = 'all',
                                 binary_dict=binary_dict,
                                 mean_thr = -10.0,
-                                std_thr = 0.0, # FIXME: Evaluate setting it to 0.1
+                                std_thr = 0.0,
                                 rand_frac=1.0,
+                                sample_frac=0.5,
                                 label_type = 'phenotype',
                                 batch_normalization=norm_str,
                                 partition_seed = 0,
@@ -75,6 +76,7 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
         clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
     else:
         clf = SGDClassifier(max_iter=1000, verbose=2, n_jobs=-1, random_state=0, validation_fraction=0.1)
+        # clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
 
     clf.fit(x_train, y_train)
 

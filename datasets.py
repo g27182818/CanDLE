@@ -29,7 +29,7 @@ pylab.rcParams.update(params)
 # TODO: Add sample_frac parameter to main and one_exp
 class ToilDataset():
     def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5,rand_frac = 1.0, sample_frac = 0.1, gene_list_csv='None', label_type = 'phenotype', 
+                std_thr=0.5,rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None', label_type = 'phenotype', 
                 batch_normalization='None', partition_seed=0, force_compute = False):
         self.path = path
         self.tissue = tissue
@@ -281,17 +281,26 @@ class ToilDataset():
             tqdm.pandas(desc="Computing std Healthy TCGA")
             healthy_tcga_std = self.matrix_data_filtered.loc[:, healthy_tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='healthy_tcga_std')
             tqdm.pandas(desc="Computing Joint std")
-            joint_std = self.matrix_data.loc[:, joint_samples].progress_apply(np.std, axis = 1).to_frame(name='joint_std')
+            joint_std = self.matrix_data_filtered.loc[:, joint_samples].progress_apply(np.std, axis = 1).to_frame(name='joint_std')
 
             # Compute the fraction of samples where a gene is expressed
             print('Computing fraction of samples where each gene is expressed ...')
             min_val = self.matrix_data_filtered.min().min() # Get minimum value
-            expressed_matrix = self.matrix_data_filtered > min_val # Compute expressed positions
-            sample_fraction = expressed_matrix.sum(axis=1)/expressed_matrix.shape[1] # Compute expression fraction
-            sample_fraction.name = 'sample_frac'
+            tqdm.pandas(desc="Computing Expressed Genes")
+            expressed_matrix = self.matrix_data_filtered.progress_apply(lambda x: x>min_val, axis = 1) # Compute expressed positions
+            
+            tqdm.pandas(desc="Computing Joint Expressed Sample Fraction")
+            joint_sample_fraction = expressed_matrix.progress_apply(np.mean, axis = 1).to_frame(name='joint_sample_frac')
+            tqdm.pandas(desc="Computing GTEx Expressed Sample Fraction")
+            gtex_sample_fraction = expressed_matrix.loc[:, gtex_samples].progress_apply(np.mean, axis = 1).to_frame(name='gtex_sample_frac')
+            tqdm.pandas(desc="Computing TCGA Expressed Sample Fraction")
+            tcga_sample_fraction = expressed_matrix.loc[:, tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='tcga_sample_frac')
+            
 
             # Join stats in single dataframe
-            general_stats = pd.concat([gtex_mean, tcga_mean, healthy_tcga_mean, joint_mean, gtex_std, tcga_std, healthy_tcga_std, joint_std, sample_fraction], axis=1)
+            general_stats = pd.concat([gtex_mean, tcga_mean, healthy_tcga_mean, joint_mean,
+                                        gtex_std, tcga_std, healthy_tcga_std, joint_std,
+                                        joint_sample_fraction, gtex_sample_fraction, tcga_sample_fraction,], axis=1)
             general_stats.to_csv(os.path.join(self.path, 'general_stats.csv'))
 
         return general_stats
@@ -312,9 +321,9 @@ class ToilDataset():
             print("Computing mean, std and list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
             
             # Find the indices of the samples with mean, standard deviation and sample fractions that fulfill the thresholds
-            mean_bool_index = ((self.general_stats['joint_mean']>self.mean_thr) & (self.general_stats['gtex_mean']>self.mean_thr) & (self.general_stats['joint_mean']>self.mean_thr))
-            std_bool_index = ((self.general_stats['joint_std']>self.std_thr) & (self.general_stats['gtex_std']>self.std_thr) & (self.general_stats['joint_std']>self.std_thr))
-            sample_frac_bool_index = self.general_stats['sample_frac'] > self.sample_frac
+            mean_bool_index = ((self.general_stats['joint_mean']>self.mean_thr) & (self.general_stats['gtex_mean']>self.mean_thr) & (self.general_stats['tcga_mean']>self.mean_thr))
+            std_bool_index = ((self.general_stats['joint_std']>self.std_thr) & (self.general_stats['gtex_std']>self.std_thr) & (self.general_stats['tcga_std']>self.std_thr))
+            sample_frac_bool_index = ((self.general_stats['joint_sample_frac'] > self.sample_frac) & (self.general_stats['gtex_sample_frac'] > self.sample_frac) & (self.general_stats['tcga_sample_frac'] > self.sample_frac))
             
             # Compute intersection of mean_data_index and std_data_index
             mean_std_sample_index = np.logical_and.reduce((mean_bool_index.values, std_bool_index.values, sample_frac_bool_index)).ravel()
@@ -594,7 +603,7 @@ class ToilDataset():
         plt.savefig(os.path.join(self.dataset_info_path, "label_distribution.png"), dpi=300)
         plt.close()
     
-    # This funtion makes histograms of the gene expression values for each dataset Gtex and TCGA
+    # This function makes histograms of the gene expression values for each dataset Gtex and TCGA
     def plot_gene_expression_histograms(self, rand_size=10000):
 
         # Get just GTEx  and just TCGA matrices
@@ -627,14 +636,25 @@ class ToilDataset():
 
     # This function plots an histogram of the fraction of samples that express each gene
     def plot_sample_frac(self):
-        plt.figure()
-        ax = self.general_stats['sample_frac'].hist(bins=100, grid=False, color='darkcyan')
-        plt.title('Fraction of Samples Where\nGene is Expressed')
-        plt.xlabel('Sample Fraction')
-        plt.ylabel('Frequency')
-        plt.xlim([0,1])
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
+        # Obtain minimum of filtering
+        self.general_stats['min_sample_frac'] = self.general_stats[['joint_sample_frac', 'gtex_sample_frac','tcga_sample_frac']].min(axis=1)
+        var_list = ['joint_sample_frac', 'gtex_sample_frac', 'tcga_sample_frac', 'min_sample_frac']
+        tit_list = ['Joint Fraction of Samples Where\nGene is Expressed', 'GTEx Fraction of Samples Where\nGene is Expressed',
+                    'TCGA Fraction of Samples Where\nGene is Expressed', 'Min(GTEx/TCGA) Fraction of Samples Where\nGene is Expressed']
+        color_list = ['dodgerblue', 'k', 'darkcyan', 'darkseagreen']
+        # Make a figure
+        fig, axes = plt.subplots(2, 2, figsize = (18, 12))
+        for i in range(4):
+            curr_row = i//2
+            curr_col = i%2
+            curr_ax = axes[curr_row, curr_col]
+            self.general_stats[var_list[i]].hist(bins=100, grid=False, color=color_list[i], ax=curr_ax)
+            curr_ax.set_title(tit_list[i])
+            curr_ax.set_ylabel('Frequency')
+            curr_ax.set_xlabel('Sample Fraction')
+            curr_ax.set_xlim([0,1])
+            curr_ax.spines['top'].set_visible(False)
+            curr_ax.spines['right'].set_visible(False)
         plt.tight_layout()
         plt.savefig(os.path.join(self.path, 'expressed_sample_fraction_hist.png'))
         plt.close()          

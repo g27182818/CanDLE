@@ -13,16 +13,15 @@ from adjustText import adjust_text
 mode = 'compute' # 'compute' or 'plot'
 dataset = 'tcga' # 'tcga', 'gtex' or 'both'
 use_weights = 'True' # 'True' or 'False'
+sample_frac = 0.5 # Float in [0, 1)
 
 gpu = '0' # What GPU to use
 ######################################################################
 
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
-if use_weights=='True':
-    exp_folder_name = 'CanDLE_all_vs_one_exp_1_epoch'
-else:
-    exp_folder_name = 'CanDLE_all_vs_one_exp_1_epoch_no_weights'
+# Define experiment name
+exp_folder_name = f'CanDLE_all_vs_one_weights_{use_weights}_sample_frac_{sample_frac}'
 
 # Get mapper file to know labels
 mapper_path = os.path.join('data','toil_data', 'mappers', 'category_mapper.json')
@@ -53,7 +52,7 @@ if mode == 'compute':
         # Just compute the models if they are not already computed
         if not os.path.exists(os.path.join('Results', exp_names[i])):
             # run main.py with subprocess
-            command = f'python main.py --all_vs_one {labels[i]} --exp_name {exp_names[i]} --batch_norm normal --std_thr 0.1 --weights {use_weights} --epochs 1'
+            command = f'python main.py --all_vs_one {labels[i]} --exp_name {exp_names[i]} --batch_norm normal --sample_frac {sample_frac} --weights {use_weights}'
             print(command)
             command = command.split()
             subprocess.call(command)
@@ -139,7 +138,7 @@ if mode == 'plot' or mode == 'compute':
     # Plot of max F1 vs AP
     # plot max f1 vs ap. Set the size of the marker to be the size of the training set
     ax[1].scatter(AP_list, f1_list, s=2*np.array(n_list), c=color_matrix, alpha=0.8)
-    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.6 or f1_list[i]<0.6)]
+    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.8 or f1_list[i]<0.8)]
     [text.set_fontsize(13) for text in texts]
     adjust_text(texts)
     plt.xlim([0.0, 1.04])
