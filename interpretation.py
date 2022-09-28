@@ -11,7 +11,7 @@ from datasets import *
 #            You can safely change these parameters                  #
 ######################################################################
 # Mode of the code
-mode = 'interpret' # 'compute' or 'interpret'
+mode = 'compute' # 'compute' or 'interpret'
 num_ranges = np.arange(0, 100) # Here you can change the number of trained candle models to perform wald z test. The numbers here are the partition seeds of the datasets.
 gpu = '0' # GPU to train
 ######################################################################
@@ -38,7 +38,7 @@ if mode == 'compute':
         # Just compute the models if they are not already computed
         if not os.path.exists(os.path.join('Results', exp_names[i])):
             # run main.py with subprocess
-            command = 'python main.py --exp_name {} --seed {}'.format(exp_names[i], num_ranges[i])
+            command = f'python main.py --exp_name {exp_names[i]} --seed {num_ranges[i]} --sample_frac 0.5'
             print(command)
             command = command.split()
             subprocess.call(command)
@@ -56,6 +56,9 @@ if (mode == 'interpret') or (mode == 'compute'):
                         binary_dict={},
                         mean_thr = -10.0,
                         std_thr = 0.0,
+                        rand_frac = 1.0,
+                        sample_frac=0.5,
+                        gene_list_csv = 'None',
                         label_type = 'phenotype',
                         batch_normalization='normal',
                         partition_seed = 0,

@@ -6,6 +6,8 @@ import json
 import pickle as pkl
 import matplotlib
 from adjustText import adjust_text
+import string
+from matplotlib.colors import LinearSegmentedColormap
 
 ######################################################################
 #            You can safely change these parameters                  #
@@ -86,9 +88,11 @@ if mode == 'plot' or mode == 'compute':
 
     # Handle colors to plot
     n_vec = np.array(n_list)
-    normalization = matplotlib.colors.LogNorm(vmin=np.min(n_vec), vmax=np.max(n_vec))
+    normalization = matplotlib.colors.PowerNorm(gamma = 0.3, vmin=np.min(n_vec), vmax=np.max(n_vec))
     color_vec = normalization(n_vec)
-    color_matrix = plt.cm.magma(color_vec)
+    d_colors = ["black", "darkcyan"]
+    cmap1 = LinearSegmentedColormap.from_list("mycmap", d_colors)
+    color_matrix = cmap1(color_vec)
 
 
     plt.figure(figsize=(22,10))
@@ -133,6 +137,7 @@ if mode == 'plot' or mode == 'compute':
     ax[0].set_title('Precision-Recall Curve', fontsize=28)
     ax[0].grid(alpha=0.7)
     ax[0].tick_params(labelsize=15)
+    ax[0].text(-0.1, 1.1, string.ascii_uppercase[0], transform=ax[0].transAxes, size=20, weight='bold')
     plt.gca().set_axisbelow(True)
 
     # Plot of max F1 vs AP
@@ -150,12 +155,11 @@ if mode == 'plot' or mode == 'compute':
     bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9)
     ax[1].text(0.25, 0.975, "Average Max $F_1={}$\nAverage $AP={}$".format(round(np.mean(f1_list),3), round(np.mean(AP_list),3)), ha="center", va="center", size=20,
             bbox=bbox_props)
-    # plt.xticks(np.arange(0.55, 1.05, 0.05))
-    # plt.yticks(np.arange(0.55, 1.05, 0.05))
+    ax[1].text(-0.1, 1.1, string.ascii_uppercase[1], transform=ax[1].transAxes, size=20, weight='bold')
     plt.tick_params(labelsize=15)
     plt.grid(alpha=0.7)
     plt.gca().set_axisbelow(True)
-    cbar = plt.colorbar(plt.cm.ScalarMappable(norm=normalization, cmap='magma'), ax=ax[1])
+    cbar = plt.colorbar(plt.cm.ScalarMappable(norm=normalization, cmap=cmap1), ax=ax[1])
     cbar.ax.tick_params(labelsize=15)
     cbar.set_label('Train Samples', fontsize=24)
     plt.tight_layout(w_pad=3)

@@ -2,7 +2,7 @@
 # GPU to use
 GPU=0
 # Dataset parameters #####################################
-DATASET=tcga
+DATASET=both
 TISSUE=all
 ALL_VS_ONE=False
 MEAN_THR=-10.0
@@ -17,7 +17,7 @@ WEIGHTS=True
 BATCH_SIZE=100
 EPOCHS=20
 # Paths ###################################################
-EXP_NAME=CanDLE_classification_tcga
+EXP_NAME=CanDLE_classification
 # Mode ####################################################
 MODE=both # train, test or both
 

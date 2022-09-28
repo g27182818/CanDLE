@@ -6,6 +6,7 @@ import seaborn as sn
 import pandas as pd
 from tqdm import tqdm
 import matplotlib.colors as colors
+from matplotlib.colors import LinearSegmentedColormap
 
 def train(train_loader, model, device, criterion, optimizer):
     """
@@ -181,11 +182,11 @@ def print_epoch(train_dict, test_dict, loss, epoch, path):
 
 def plot_training(train_list, val_list, loss, save_path):
     """
-    This function plots a 2X1 figure. The left figure has the training performance in train and val. The rigth figure has
+    This function plots a 2X1 figure. The left figure has the training performance in train and val. The right figure has
     the evolution of the mean training loss over the epochs.
-    :param train_list: (dict list) List containing the train metric dictionaries acording to the test() function. One
+    :param train_list: (dict list) List containing the train metric dictionaries according to the test() function. One
                         value per epoch.
-    :param val_list: (dict list) List containing the val metric dictionaries acording to the test() function. One
+    :param val_list: (dict list) List containing the val metric dictionaries according to the test() function. One
                         value per epoch.
     :param loss: (list) Training loss value list. One value per epoch.
     :param save_path: (str) The path to save the figure.
@@ -235,7 +236,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     :param save_path: (str) General path of the experiment results folder.
     """
 
-    # Handle binary problem when ploting confusion matrix
+    # Handle binary problem when plotting confusion matrix
     if (len(set(lab_txt_2_lab_num.values())) == 2) and (len(lab_txt_2_lab_num.keys()) > 2):
         binary_problem = True
         classes = [0, 1]
@@ -252,12 +253,14 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     fig_size = (50, 30)
     tit_size = 40
     lab_size = 30
-    cm_str = 'Purples'
+    
+    d_colors = ["white", "darkcyan"]
+    cmap1 = LinearSegmentedColormap.from_list("mycmap", d_colors)
 
     # Plot confusion matrix for train
     plt.figure(figsize=fig_size)
     sn.set(font_scale=scale)
-    ax = sn.heatmap(df_train, annot=True, linewidths=.5, fmt='g', cmap=plt.get_cmap(cm_str),
+    ax = sn.heatmap(df_train, annot=True, linewidths=.5, fmt='g', cmap=cmap1,
                     linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
     plt.title("Train \nConfusion matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
@@ -274,7 +277,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     # Plot confusion matrix for test
     plt.figure(figsize=fig_size)
     sn.set(font_scale=scale)
-    ax = sn.heatmap(df_test, annot=True, linewidths=.5, fmt='g', cmap=plt.get_cmap(cm_str),
+    ax = sn.heatmap(df_test, annot=True, linewidths=.5, fmt='g', cmap=cmap1,
                     linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
     plt.title("Validation\nConfusion matrix", fontsize=tit_size)
     plt.yticks(rotation=0)

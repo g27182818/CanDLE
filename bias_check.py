@@ -1,17 +1,28 @@
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import SGDClassifier
+from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from datasets import *
 import os
+import pylab
+import string
 
 # Set axis bellow for matplotlib
 plt.rcParams['axes.axisbelow'] = True
+# Set figure fontsizes
+params = {'legend.fontsize': 'large',
+         'axes.labelsize': 'x-large',
+         'axes.titlesize':'xx-large',
+         'xtick.labelsize':'large',
+         'ytick.labelsize':'large'}
+pylab.rcParams.update(params)
 
 ######################################################################
 #            You can safely change these parameters                  #
 ######################################################################
 dataset_to_check = 'toil_norm' # toil , wang or toil_norm
+sample_frac = 0.99 # Float [0,1) minimum fraction of samples in which each gene is expressed
 ######################################################################
 
 # Make directory to save bias separation histograms
@@ -35,7 +46,6 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
     # Define normalization
     norm_str = 'None' if dataset_to_check=='toil' else 'normal'
 
-
     # Declare dataset
     dataset = ToilDataset(os.path.join("data", "toil_data"),
                                 dataset = 'both',
@@ -44,7 +54,7 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
                                 mean_thr = -10.0,
                                 std_thr = 0.0,
                                 rand_frac=1.0,
-                                sample_frac=0.5,
+                                sample_frac=sample_frac,
                                 label_type = 'phenotype',
                                 batch_normalization=norm_str,
                                 partition_seed = 0,
@@ -61,21 +71,77 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
     x_val = data['val'].T
     y_val = labels['val'].index.str.contains('TCGA')
 
-    # breakpoint()
+    if (dataset_to_check=='toil_norm') & (sample_frac==0.0):
+        # Make Figure
+        fig, axes = plt.subplots(1, 2, figsize=(15,7))
+        x_train.loc[y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', c='darkcyan', ax=axes[0])
+        x_train.loc[~y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', c = 'k', ax=axes[0])
+        axes[0].set_title('Scatter of 2 Genes Expressed in\n Less Than 0.2% of Samples')
+        axes[0].spines['top'].set_visible(False)
+        axes[0].spines['right'].set_visible(False)
+        axins = axes[0].inset_axes([0.3, 0.3, 0.47, 0.47])
+        x_train.loc[y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', xlim=(-0.1,0.1), ylim = (-0.1,0.1), c='darkcyan', ax=axins, xlabel='', ylabel='')
+        x_train.loc[~y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', xlim=(-0.1,0.1), ylim = (-0.1,0.1), c = 'k', ax=axins, xlabel='', ylabel='')
+        axins.set_title('99.6% of Samples')
+        axes[0].indicate_inset_zoom(axins, edgecolor="black")
+        axes[0].legend(['TCGA', 'GTEx'])
+        axes[0].text(-0.1, 1.1, string.ascii_uppercase[0], transform=axes[0].transAxes, size=20, weight='bold')
 
-    # plt.figure()
-    # ax = x_train.loc[y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', xlim=(-0.1,0.1), ylim = (-0.1,0.1), c='#4c8682')
-    # x_train.loc[~y_train, :].plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', xlim=(-0.1,0.1), ylim = (-0.1,0.1), c = 'k', ax=ax)
-    # plt.savefig(os.path.join('Figures', 'test_outlier.png'), dpi=300)
+        # Get genes with sample frac between 0.5 and 0.51
+        valid_genes = dataset.general_stats[(dataset.general_stats['min_sample_frac']<0.51) & (dataset.general_stats['min_sample_frac']>0.50)].index.values
+        # Make figure
+        x_train.loc[y_train, :].plot(x=valid_genes[3], y=valid_genes[4], kind='scatter', c='darkcyan', ax = axes[1])
+        x_train.loc[~y_train, :].plot(x=valid_genes[3], y=valid_genes[4], kind='scatter', c = 'k', ax=axes[1])
+        axes[1].set_title('Scatter of 2 Genes Expressed in\nHalf the Samples')
+        axes[1].spines['top'].set_visible(False)
+        axes[1].spines['right'].set_visible(False)
+        axes[1].legend(['TCGA', 'GTEx'])
+        axes[1].text(-0.1, 1.1, string.ascii_uppercase[1], transform=axes[1].transAxes, size=20, weight='bold')
+        plt.tight_layout()
+        plt.savefig(os.path.join('Figures', 'centered_bias.png'), dpi=300)
+        plt.close()
 
-    # # x_train.plot(x='ENSG00000251953.1', y='ENSG00000278813.1', kind='scatter', c = 'k') #  xlim=(-0.1,0.1), ylim = (-0.1,0.1),
-    # breakpoint()
+
+        # Make pca
+        pca = PCA(n_components=3)
+        pca.fit(x_train.T)
+        plt.figure()
+        plt.plot(pca.components_[:,y_train][1,:], pca.components_[:,y_train][2,:], '.', c='darkcyan')
+        plt.plot(pca.components_[:,~y_train][1,:], pca.components_[:,~y_train][2,:], '.', c='k')
+        plt.title('PCA of Normalized Toil Dataset')
+        plt.xlabel('Principal Component 2')
+        plt.ylabel('Principal Component 3')
+        plt.legend(['TCGA', 'GTEx'])
+        ax = plt.gca()
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        plt.tight_layout()
+        plt.savefig(os.path.join('Figures', 'pca_norm_toil_sample_frac_0.5.png'), dpi=300)
+        plt.close()
+    
+    if (dataset_to_check=='toil'):
+        # Make pca
+        pca = PCA(n_components=3)
+        pca.fit(x_train.T)
+        plt.figure()
+        plt.plot(pca.components_[:,y_train][1,:], pca.components_[:,y_train][2,:], '.', c='darkcyan')
+        plt.plot(pca.components_[:,~y_train][1,:], pca.components_[:,~y_train][2,:], '.', c='k')
+        plt.title('PCA of Original Toil Dataset')
+        plt.xlabel('Principal Component 2')
+        plt.ylabel('Principal Component 3')
+        plt.legend(['TCGA', 'GTEx'])
+        ax = plt.gca()
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        plt.tight_layout()
+        plt.savefig(os.path.join('Figures', 'pca_toil.png'), dpi=300)
+        plt.close()
 
     # Assign classifier depending on the dataset
     if dataset_to_check=='toil':
         clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
     else:
-        clf = SGDClassifier(max_iter=1000, verbose=2, n_jobs=-1, random_state=0, validation_fraction=0.1)
+        clf = SGDClassifier(max_iter=1000, verbose=2, n_jobs=-1, random_state=0, validation_fraction=0.2)
         # clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
 
     clf.fit(x_train, y_train)

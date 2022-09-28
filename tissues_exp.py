@@ -22,25 +22,41 @@ pylab.rcParams.update(params)
 #            You can safely change these parameters                  #
 ######################################################################
 gpu = '0' # Set GPU to train
-mode = 'compute' # Can be compute or plot
+mode = 'table' # Can be compute or table
 ######################################################################
 
 # Define cuda device
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
-if mode == 'compute':
-    # Get tissue names using mapper file from toil data
-    with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"), "r") as f:
-            mapper_dict = json.load(f)
+# Get tissue names using mapper file from toil data
+with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"), "r") as f:
+        mapper_dict = json.load(f)
 
-    # Get all important tissue names sorted 
-    tissue_names = sorted(list(set(mapper_dict.values())))
-    tissue_names.remove('Not Paired') # Remove not paired tissues
-    # Get experiment names and commands to run
-    exp_names = [os.path.join('tissues_exp', tissue) for tissue in tissue_names]
-    commands = [f'python main.py --exp_name {exp_names[i]} --tissue {tissue_names[i]}' for i in range(len(tissue_names))]
+# Get all important tissue names sorted 
+tissue_names = sorted(list(set(mapper_dict.values())))
+tissue_names.remove('Not Paired') # Remove not paired tissues
+# Get experiment names and commands to run
+exp_names = [os.path.join('tissues_exp', tissue) for tissue in tissue_names]
+
+if mode == 'compute':
+    # Define commands to run
+    commands = [f'python main.py --exp_name {exp_names[i]} --tissue {tissue_names[i]} --sample_frac 0.5' for i in range(len(tissue_names))]
 
     for command in commands:
         print(command)
         command = command.split()
         subprocess.call(command)
+
+if mode == 'table':
+    # Get metric paths
+    metric_paths = sorted(glob.glob(os.path.join('Results', 'tissues_exp', '*', 'metric_dicts.pickle')))
+    # Load metric dicts
+    metric_dicts = [pkl.load(open(metric_path, 'rb')) for metric_path in metric_paths]
+    # Obtain mACC and mAP
+    macc = [metric['val'][-1]['mean_acc'] for metric in metric_dicts]
+    map = [metric['val'][-1]['mean_AP'] for metric in metric_dicts]
+    # Define global df of results
+    results_df = pd.DataFrame({'tissue': tissue_names, 'mACC': macc, 'mAP': map})
+
+    print(results_df)
+
