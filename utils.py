@@ -7,6 +7,17 @@ import pandas as pd
 from tqdm import tqdm
 import matplotlib.colors as colors
 from matplotlib.colors import LinearSegmentedColormap
+import pylab
+
+# Set figure fontsizes
+params = {'legend.fontsize': 'large',
+         'axes.labelsize': 'x-large',
+         'axes.titlesize':'xx-large',
+         'xtick.labelsize':'large',
+         'ytick.labelsize':'large'}
+pylab.rcParams.update(params)
+
+
 
 def train(train_loader, model, device, criterion, optimizer):
     """
@@ -251,7 +262,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     # Plot params
     scale = 1.5 if binary_problem==False else 3.0
     fig_size = (50, 30)
-    tit_size = 40
+    tit_size = 60
     lab_size = 30
     
     d_colors = ["white", "darkcyan"]
@@ -262,7 +273,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     sn.set(font_scale=scale)
     ax = sn.heatmap(df_train, annot=True, linewidths=.5, fmt='g', cmap=cmap1,
                     linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
-    plt.title("Train \nConfusion matrix", fontsize=tit_size)
+    plt.title("Train Confusion Matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
     ax.tick_params(labelsize=lab_size)
@@ -279,7 +290,7 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     sn.set(font_scale=scale)
     ax = sn.heatmap(df_test, annot=True, linewidths=.5, fmt='g', cmap=cmap1,
                     linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
-    plt.title("Validation\nConfusion matrix", fontsize=tit_size)
+    plt.title("Validation Confusion Matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
     ax.tick_params(labelsize=lab_size)

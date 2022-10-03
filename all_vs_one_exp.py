@@ -7,12 +7,16 @@ import pickle as pkl
 import matplotlib
 from adjustText import adjust_text
 import string
+import glob
 from matplotlib.colors import LinearSegmentedColormap
+from datasets import *
+from model import *
+from utils import *
 
 ######################################################################
 #            You can safely change these parameters                  #
 ######################################################################
-mode = 'compute' # 'compute' or 'plot'
+mode = 'test' # 'compute', 'plot' or 'test'
 dataset = 'tcga' # 'tcga', 'gtex' or 'both'
 use_weights = 'True' # 'True' or 'False'
 sample_frac = 0.5 # Float in [0, 1)
@@ -59,41 +63,42 @@ if mode == 'compute':
             command = command.split()
             subprocess.call(command)
 
+# Get results in validation ##########################################################################
+metric_paths = [os.path.join('Results', exp_name, 'metric_dicts.pickle') for exp_name in exp_names]
+# Load metric dicts
+metric_dicts = [pkl.load(open(metric_path, 'rb')) for metric_path in metric_paths]
+
+pr_curve_list = []
+n_list = []
+AP_list = []
+f1_list = []
+for metric_dict in metric_dicts:
+    # Get val pr curve
+    val_metrics = metric_dict['val'][-1]
+    pr_curve = val_metrics['pr_curve']
+    pr_curve_list.append(pr_curve)
+    # Get val AP
+    val_AP = val_metrics['AP_list'][1]
+    AP_list.append(val_AP)
+    # Get val max F1 score
+    val_max_F1 = val_metrics['max_f1']
+    f1_list.append(val_max_F1)
+    # Get sample number of training set
+    train_metrics = metric_dict['train'][-1]
+    conf_matrix_train = train_metrics['conf_matrix']
+    n_train = np.sum(conf_matrix_train[1,:])
+    n_list.append(n_train)
+
+# Handle colors to plot
+n_vec = np.array(n_list)
+normalization = matplotlib.colors.PowerNorm(gamma = 0.3, vmin=np.min(n_vec), vmax=np.max(n_vec))
+color_vec = normalization(n_vec)
+d_colors = ["black", "darkcyan"]
+cmap1 = LinearSegmentedColormap.from_list("mycmap", d_colors)
+color_matrix = cmap1(color_vec)
+
 # Plot results
 if mode == 'plot' or mode == 'compute':
-    metric_paths = [os.path.join('Results', exp_name, 'metric_dicts.pickle') for exp_name in exp_names]
-    # Load metric dicts
-    metric_dicts = [pkl.load(open(metric_path, 'rb')) for metric_path in metric_paths]
-
-    pr_curve_list = []
-    n_list = []
-    AP_list = []
-    f1_list = []
-    for metric_dict in metric_dicts:
-        # Get val pr curve
-        val_metrics = metric_dict['val'][-1]
-        pr_curve = val_metrics['pr_curve']
-        pr_curve_list.append(pr_curve)
-        # Get val AP
-        val_AP = val_metrics['AP_list'][1]
-        AP_list.append(val_AP)
-        # Get val max F1 score
-        val_max_F1 = val_metrics['max_f1']
-        f1_list.append(val_max_F1)
-        # Get sample number of training set
-        train_metrics = metric_dict['train'][-1]
-        conf_matrix_train = train_metrics['conf_matrix']
-        n_train = np.sum(conf_matrix_train[1,:])
-        n_list.append(n_train)
-
-    # Handle colors to plot
-    n_vec = np.array(n_list)
-    normalization = matplotlib.colors.PowerNorm(gamma = 0.3, vmin=np.min(n_vec), vmax=np.max(n_vec))
-    color_vec = normalization(n_vec)
-    d_colors = ["black", "darkcyan"]
-    cmap1 = LinearSegmentedColormap.from_list("mycmap", d_colors)
-    color_matrix = cmap1(color_vec)
-
 
     plt.figure(figsize=(22,10))
     plt.subplot(121)
@@ -167,6 +172,120 @@ if mode == 'plot' or mode == 'compute':
     plt.savefig(os.path.join('Results',exp_folder_name, dataset,'pr_curves_summary.png'), dpi=400)
     plt.close()
 
+
+# Get results in test ##########################################################################
+if mode == 'test':
+    
+    complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
+    pr_curve_list = []
+    AP_list = []
+    f1_list = []
+    
+
+    for i, lab in enumerate(labels):
+
+        binary_dict = {label: 0 for label in complete_label_list}
+        binary_dict[lab] = 1
+
+        # Declare dataset to test models
+        curr_dataset = ToilDataset(os.path.join("data", "toil_data"),
+                            dataset = 'both',
+                            tissue = 'all',
+                            binary_dict=binary_dict,
+                            mean_thr = -10.0,
+                            std_thr = 0.0,
+                            rand_frac = 1.0,
+                            sample_frac=0.5,
+                            gene_list_csv = 'None',
+                            label_type = 'phenotype',
+                            batch_normalization='normal',
+                            partition_seed = 0,
+                            force_compute = False)
+
+        # Obtain test loader
+        _, _, test_loader = curr_dataset.get_dataloaders(batch_size = 100)
+
+        # Declare model
+        device = torch.device("cuda") 
+        model = MLP([len(curr_dataset.filtered_gene_list)], out_size = curr_dataset.num_classes ).to(device)
+        # Declare path to load final model
+        final_model_path = glob.glob(os.path.join('Results', exp_names[i], "checkpoint_epoch_*"))
+
+        # Load final model dicts
+        total_saved_dict = torch.load(final_model_path[0])
+        model_dict = total_saved_dict['model_state_dict']
+
+        # Load state dicts to model and optimizer
+        model.load_state_dict(model_dict)
+
+        # Put model in eval mode
+        model.eval()
+
+        # Obtain test metrics
+        test_metrics = test(test_loader, model, device, num_classes=curr_dataset.num_classes)
+
+    
+        # Get val pr curve
+        pr_curve = test_metrics['pr_curve']
+        pr_curve_list.append(pr_curve)
+        # Get val AP
+        test_AP = test_metrics['AP_list'][1]
+        AP_list.append(test_AP)
+        # Get val max F1 score
+        test_max_F1 = test_metrics['max_f1']
+        f1_list.append(test_max_F1)
+    
+    # Plot test results
+    f, ax = plt.subplots(1, 2, gridspec_kw={'width_ratios': [0.87, 1]}, figsize=(23,10))
+    f_scores = np.linspace(0.1, 0.9, num=9)
+    for f_score in f_scores:
+        x = np.linspace(0.01, 1.01, 499)
+        y = f_score * x / (2 * x - f_score)
+        ax[0].plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
+    for i in range(len(pr_curve_list)):
+        pr_curve = pr_curve_list[i]
+        ax[0].plot(pr_curve[1], pr_curve[0], color=color_matrix[i])
+    
+    ax[0].set_xlabel('Recall', fontsize=24)
+    ax[0].set_ylabel('Precision', fontsize=24)
+    ax[0].set_ylim([0.0, 1.01])
+    ax[0].set_xlim([0.0, 1.01])
+    ax[0].set_title('Precision-Recall Curve', fontsize=28)
+    ax[0].grid(alpha=0.7)
+    ax[0].tick_params(labelsize=15)
+    ax[0].text(-0.1, 1.1, string.ascii_uppercase[0], transform=ax[0].transAxes, size=20, weight='bold')
+    plt.gca().set_axisbelow(True)
+
+    # Plot of max F1 vs AP
+    # plot max f1 vs ap. Set the size of the marker to be the size of the training set
+    ax[1].scatter(AP_list, f1_list, s=2*np.array(n_list), c=color_matrix, alpha=0.8)
+    texts = [ax[1].text(AP_list[i]+n_list[i]/40000, f1_list[i]+n_list[i]/40000, labels[i]+' ({})'.format(n_list[i]), ha='left', va='bottom') for i in range(len(labels)) if (AP_list[i]<0.8 or f1_list[i]<0.8)]
+    [text.set_fontsize(13) for text in texts]
+    adjust_text(texts)
+    plt.xlim([0.0, 1.04])
+    plt.ylim([0.0, 1.04])
+    plt.xlabel('$AP$', fontsize=24)
+    plt.ylabel('Max $F_1$', fontsize=24)
+    plt.title('Max $F_1$ Vs Average Precision', fontsize=28)
+    # Put box annotations on the plot
+    bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9)
+    ax[1].text(0.25, 0.975, "Average Max $F_1={}$\nAverage $AP={}$".format(round(np.mean(f1_list),3), round(np.mean(AP_list),3)), ha="center", va="center", size=20,
+            bbox=bbox_props)
+    ax[1].text(-0.1, 1.1, string.ascii_uppercase[1], transform=ax[1].transAxes, size=20, weight='bold')
+    plt.tick_params(labelsize=15)
+    plt.grid(alpha=0.7)
+    plt.gca().set_axisbelow(True)
+    cbar = plt.colorbar(plt.cm.ScalarMappable(norm=normalization, cmap=cmap1), ax=ax[1])
+    cbar.ax.tick_params(labelsize=15)
+    cbar.set_label('Train Samples', fontsize=24)
+    plt.tight_layout(w_pad=3)
+    plt.show()
+    plt.savefig(os.path.join('Results',exp_folder_name, dataset,'pr_curves_summary_test.png'), dpi=400)
+    plt.close()
+        
+
+
+        
 
 
 

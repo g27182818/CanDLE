@@ -22,7 +22,7 @@ pylab.rcParams.update(params)
 #            You can safely change these parameters                  #
 ######################################################################
 dataset_to_check = 'toil_norm' # toil , wang or toil_norm
-sample_frac = 0.99 # Float [0,1) minimum fraction of samples in which each gene is expressed
+sample_frac = 0.5 # Float [0,1) minimum fraction of samples in which each gene is expressed
 ######################################################################
 
 # Make directory to save bias separation histograms
@@ -141,8 +141,8 @@ if (dataset_to_check=='toil') or (dataset_to_check=='toil_norm'):
     if dataset_to_check=='toil':
         clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
     else:
-        clf = SGDClassifier(max_iter=1000, verbose=2, n_jobs=-1, random_state=0, validation_fraction=0.2)
-        # clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
+        # clf = SGDClassifier(max_iter=1000, verbose=2, n_jobs=-1, random_state=0, validation_fraction=0.2)
+        clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
 
     clf.fit(x_train, y_train)
 
@@ -188,7 +188,7 @@ elif dataset_to_check=='wang':
 
 
 # This code plots the separation histogram #############################################
-# Get the norm of the hiperplane
+# Get the norm of the hyperplane
 plane_norm = np.linalg.norm(clf.coef_)
 # Get decision function values
 dec_function = clf.decision_function(x_val)
@@ -217,6 +217,10 @@ ax.spines['right'].set_visible(False)
 plt.tight_layout()
 plt.savefig(save_path, dpi=300)
 plt.close()
+
+breakpoint()
+
+
 
 
 

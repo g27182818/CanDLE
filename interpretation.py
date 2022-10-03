@@ -11,7 +11,7 @@ from datasets import *
 #            You can safely change these parameters                  #
 ######################################################################
 # Mode of the code
-mode = 'compute' # 'compute' or 'interpret'
+mode = 'interpret' # 'compute' or 'interpret'
 num_ranges = np.arange(0, 100) # Here you can change the number of trained candle models to perform wald z test. The numbers here are the partition seeds of the datasets.
 gpu = '0' # GPU to train
 ######################################################################

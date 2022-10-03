@@ -72,7 +72,7 @@ dataset = ToilDataset(os.path.join("data", "toil_data"),
                             batch_normalization=args.batch_norm,
                             partition_seed = args.seed,
                             force_compute = False)
-
+                            
 # Dataloader declaration
 train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = args.batch_size)
 
@@ -119,8 +119,17 @@ if not os.path.isdir(results_path):
     os.makedirs(results_path)
 
 if (args.mode == "train") or (args.mode == 'both'):
+    
+    # Stop auxiliary variables
+    stop = False
+    epoch = 0
+    best_macc = -1
+    best_epoch = -1
+
     # Train/test cycle
-    for epoch in range(args.epochs):
+    while stop == False:
+
+    # for epoch in range(args.epochs):
         print('-----------------------------------------')
         print("Epoch " + str(epoch+1) + ":")
         print('                                         ')
@@ -146,18 +155,48 @@ if (args.mode == "train") or (args.mode == 'both'):
         train_metric_lst.append(train_metrics)
         val_metric_lst.append(val_metrics)
         loss_list.append(loss.cpu().detach().numpy())
+        
+        # Get if this epoch has the best model
+        if val_metrics['mean_acc'] > best_macc:
+            best_epoch = epoch
+            best_macc = val_metrics['mean_acc']
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': loss},
+                os.path.join(results_path, "best_model.pt"))
 
-        # Print performance
-        print_epoch(train_metrics, val_metrics, loss, epoch, train_log_path)
-
-        # Save checkpoint at last epoch
-        if epoch+1== args.epochs:
+        # Handle args.epochs = -1 to stop until training convergence
+        if (args.epochs == -1) and ((epoch - best_epoch) > 30):
+            # Save last model and stop training if the val metrics have not improved in the las 30 epochs
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': loss},
                 os.path.join(results_path, "checkpoint_epoch_"+str(epoch+1)+".pt"))
+            stop = True
+
+        # Save checkpoint and stop cycle at last epoch
+        elif epoch+1== args.epochs:
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': loss},
+                os.path.join(results_path, "checkpoint_epoch_"+str(epoch+1)+".pt"))
+            
+            # Stop cycle              
+            stop = True
+        
+        # Print performance
+        print_epoch(train_metrics, val_metrics, loss, epoch, train_log_path)
+        print(f'The best epoch is {best_epoch+1} with macc of {best_macc}')
+
+        # Pass to next epoch
+        epoch = epoch + 1
+
 
     # Save metrics dicts
     complete_metric_dict = {"train": train_metric_lst,
@@ -180,7 +219,8 @@ if (args.mode == "train") or (args.mode == 'both'):
                         dataset.lab_txt_2_lab_num,
                         conf_matrix_fig_path)
 
-if (args.mode == 'test') or (args.mode == 'both'):
+# TODO: Handle the loading of the best model or the last model. Right now it only tests if there is a fixed number of epochs                        
+if ((args.mode == 'test') or (args.mode == 'both')) & (args.epochs>-1):
     # Declare path to load final model
     final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(args.epochs)+".pt")
 

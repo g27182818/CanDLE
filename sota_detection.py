@@ -32,6 +32,13 @@ args = parser.parse_args()
 #----------------------------------------------------------------------------------------------------------------------#
 
 
+######################################################################
+#            You can safely change these parameters                  #
+######################################################################
+mode = 'test' # 'val', 'test'
+######################################################################
+
+
 # Adaptation of code taken from Quinn et al repository DOI: 10.3389/fgene.2019.00599 ################################
 
 def get_residuals(data,U):
@@ -112,16 +119,16 @@ for actual_label in tcga_label_list:
     x_train, x_val, x_test = x_train.T, x_val.T, x_test.T
 
     # Get scores from model
-    anomal_score,threshold = get_score_threshold(x_train, x_val)
+    anomal_score,threshold = get_score_threshold(x_train, x_val) if mode == 'val' else get_score_threshold(x_train, x_test)
 
     # Get probabilities
-    anomal_prob = (anomal_score-anomal_score.min())/(anomal_score.max()-anomal_score.min())
+    anomal_prob = (anomal_score-anomal_score.min())/(anomal_score.max()-anomal_score.min()) 
     anomal_prob =  1-anomal_prob
 
     # Get and print metrics
-    precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_val, anomal_prob)
+    precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_val, anomal_prob) if mode == 'val' else sklearn.metrics.precision_recall_curve(y_test, anomal_prob)
     max_f1 = np.nanmax(2 * (precision * recall) / (precision + recall))
-    AP = sklearn.metrics.average_precision_score(y_val, anomal_prob)
+    AP = sklearn.metrics.average_precision_score(y_val, anomal_prob) if mode == 'val' else sklearn.metrics.average_precision_score(y_test, anomal_prob)
 
     print('-'*89)
     print('Results for '+actual_label+' :')
@@ -153,7 +160,7 @@ for actual_label in tcga_label_list:
     plt.close(fig)
 
 
-print('Global results :')
+print(f'Global {mode} results:')
 print('mean max F1: {:.3f} | mean AP: {:.3f}'.format(np.mean(max_f1_list),np.mean(ap_list)))
 
 
