@@ -782,5 +782,5 @@ class WangDataset():
         return data_matrix, category_df
 
 
-test_wang = WangDataset(os.path.join('data', 'wang_data'))
-breakpoint()
+# test_wang = WangDataset(os.path.join('data', 'wang_data'))
+# breakpoint()
