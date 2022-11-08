@@ -1,6 +1,6 @@
 # CanDLE
 
-Source code for the "CanDLE: Illuminating Biases in Transcriptomic Pan-Cancer Diagnosis" paper presented in the 1st Workshop on Computational Mathematics Modeling in Cancer Analysis ([CMMCA2022](https://cmmca2022.casconf.cn/)) held at MICCAI 2022. You can consult the original video presentation in [this link](https://youtu.be/oL9W5Akdz7w). This is a research effort by the Biomedical Computer Vision gruop ([BCV](https://biomedicalcomputervision.uniandes.edu.co/)) of Universidad de los Andes authored by Gabriel Mejía, Natasha Bloch and Pablo Arbelaez.
+Source code for the "CanDLE: Illuminating Biases in Transcriptomic Pan-Cancer Diagnosis" paper presented in the 1st Workshop on Computational Mathematics Modeling in Cancer Analysis ([CMMCA2022](https://cmmca2022.casconf.cn/)) held at MICCAI 2022. You can consult the original video presentation in [this link](https://youtu.be/oL9W5Akdz7w) and the complete paper in [here](https://doi.org/10.1007/978-3-031-17266-3_7). This is a research effort by the Biomedical Computer Vision gruop ([BCV](https://biomedicalcomputervision.uniandes.edu.co/)) of Universidad de los Andes authored by Gabriel Mejía, Natasha Bloch and Pablo Arbeláez.
 
 ## News
 
@@ -26,10 +26,11 @@ The `toil_downloader.R` file downloads automatically the principal dataset neede
 Create an `R` environment:
 
 ```bash
-conda create --name R
+conda create -n r_env r-essentials r-base
+# conda create --name R
 conda activate R
-conda install -c r r-essentials
-conda install -c conda-forge r-base=4.1.0
+# conda install -c r r-essentials
+# conda install -c conda-forge r-base=4.1.0
 conda install -c conda-forge r-languageserver
 ```
 
@@ -40,7 +41,7 @@ R # This should open an R session
 install.packages("rlang")
 install.packages("UCSCXenaTools") # Can take a few minutes
 install.packages('feather')
-quit() # This will end the R session you dont need to save workspace (n)
+quit() # This will end the R session you don't need to save workspace (n)
 ```
 
 Run the downloader:
@@ -49,7 +50,7 @@ Run the downloader:
 Rscript toil_downloader.R
 ```
 
-Close the R enviroment:
+Close the R environment:
 
 ```bash
 conda deactivate
@@ -76,12 +77,13 @@ The installed packages are:
 
 Note:
 
-* There can be problems downloading the `TcgaTargetGtex_rsem_gene_tpm.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/data_matrix.feather` file should have a size of 8.62 Gb. If it does not have this size, it is recomended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
-* There can be problems downloading the `TcgaTargetGtex_gene_expected_count.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/count_matrix.feather` file should have a size of 8.61 Gb. If it does not have this size, it is recomended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_gene_expected_count.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
+* There can be problems downloading the `TcgaTargetGtex_rsem_gene_tpm.gz` file due to poor internet connection or server problems. When downloaded, the final `data/toil_data/data_matrix.feather` file should have a size of 8.62 Gb. If it does not have this size, it is recommended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
+* There can be problems downloading the `TcgaTargetGtex_gene_expected_count.gz` file due to poor internet connection or server problems. When downloaded, the final `data/toil_data/count_matrix.feather` file should have a size of 8.61 Gb. If it does not have this size, it is recommended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_gene_expected_count.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
 
 ## Automatically download [Wang et al.](https://www.nature.com/articles/sdata201861) joint TCGA/GTEx dataset
 
 This database is hosted in [this](https://doi.org/10.6084/m9.figshare.5330593) figshare link but we will download it programmatically.
+
 
 1. First make a directory to host the data:
 
@@ -109,12 +111,13 @@ To install all required dependencies run each line sequentially:
 ```bash
 conda create -n candle
 conda activate candle
-conda install pytorch torchvision cudatoolkit=10.2 python=3.9 -c pytorch
+conda install python
+pip3 install torch torchvision torchaudio
 pip install matplotlib
 pip install seaborn
 pip install pyarrow
 pip install adjustText
-pip install sklearn
+pip install -U scikit-learn
 pip install tqdm
 ```
 
