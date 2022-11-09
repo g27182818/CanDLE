@@ -28,8 +28,8 @@ pylab.rcParams.update(params)
 
 # TODO: Add sample_frac parameter to main and one_exp
 class ToilDataset():
-    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5,rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None', label_type = 'phenotype', 
+    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-10.0,
+                std_thr=0.01, rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None', label_type = 'phenotype', 
                 batch_normalization='None', partition_seed=0, force_compute = False):
         self.path = path
         self.tissue = tissue
@@ -63,9 +63,10 @@ class ToilDataset():
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
         # Find stats of each dataset segment
         self.general_stats = self.find_general_stats()
-        # Filter genes based on mean and std. This also subsamples the resulting filtered gene list by self.rand_frac
+        # Filter genes based on mean, std and sample_frac. This also subsamples the resulting filtered gene list by self.rand_frac. 
+        # If self.gene_list_csv path is specified it works like a wildcard and CanDLE will train only with the genes in the csv path
         self.filtered_gene_list, self.gene_filtered_data_matrix = self.filter_genes()
-        # Perform batch normalization this uses files saved by self.find_general_stats() and normalizes self.gene_filtered_data_matrix  
+        # Perform batch normalization, this uses self.find_general_stats() and normalizes self.gene_filtered_data_matrix  
         self.batch_normalize()
         # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
         self.filter_by_tissue()
@@ -173,7 +174,7 @@ class ToilDataset():
             
         return matrix_data_filtered, categories_filtered, phenotypes_filtered
 
-    # This function extracts the labels from categories_filtered or phenotypes_filtered and returns a list of labels and a dictionary of categories to labels
+    # This function extracts the labels from categories_filtered or phenotypes_filtered and returns a label dataframe and a dictionary of textual labels to numeric labels
     def find_labels(self):
         # Load mapper dict from normal TCGA samples to GTEX category
         with open(os.path.join(self.path, "mappers", "normal_tcga_2_gtex_mapper.json"), "r") as f:
@@ -245,7 +246,7 @@ class ToilDataset():
             json.dump(lab_txt_2_lab_num, f, indent = 4)
         return label_df, lab_txt_2_lab_num
     
-    # This function find the mean expression and std for GTEx, TCGA, healthy TCGA and the joint dataset
+    # This function finds the mean expression, std and expressed sample fraction for GTEx, TCGA, healthy TCGA and the joint dataset
     def find_general_stats(self):
         # If the info stats are already computed load them from file
         if (os.path.exists(os.path.join(self.path, 'general_stats.csv'))) & (self.force_compute == False):
@@ -305,9 +306,8 @@ class ToilDataset():
 
         return general_stats
 
-    # This function computes the mean and standard deviation of the matrix_data and filters out the samples with mean and standard deviation below the thresholds
+    # This function filters out genes by mean, standard deviation, expression fraction, random fraction or list of genes
     def filter_genes(self):
-
         # If there is a gene list specified by parameter then it overwrites mean, std and rand_frac filtering  
         if self.gene_list_csv != 'None':
             # Print user message
@@ -318,7 +318,7 @@ class ToilDataset():
         # If no list of genes is specified then proceed with mean, std, sample_frac and rand_frac filtering
         elif (not os.path.exists(os.path.join(self.dataset_info_path, "filtering_info.csv"))) or self.force_compute:
             
-            print("Computing mean, std and list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
+            print("Computing list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
             
             # Find the indices of the samples with mean, standard deviation and sample fractions that fulfill the thresholds
             mean_bool_index = ((self.general_stats['joint_mean']>self.mean_thr) & (self.general_stats['gtex_mean']>self.mean_thr) & (self.general_stats['tcga_mean']>self.mean_thr))
@@ -332,7 +332,7 @@ class ToilDataset():
 
             # Subsample gene list in case self.rand_frac < 1
             if self.rand_frac < 1:
-                np.random.seed(0) # Ensure reproducibility
+                np.random.seed(0) # Ensure reproducibility # TODO: Parametrize this seed to run variation experiments
                 rand_selector = np.zeros(len(gene_list))
                 rand_selector[:int(len(gene_list)*self.rand_frac)] = 1
                 np.random.shuffle(rand_selector) # Shuffle boolean selector
@@ -342,7 +342,7 @@ class ToilDataset():
             # Compute boolean value for each gene that indicates if it was included in the filtered gene list
             included_in_filtering = self.general_stats.index.isin(gene_list)
 
-            # Merge the mean, std and included_in_filtering into a final dataframe
+            # Merge all statistics and included_in_filtering into a final dataframe
             filtering_info_df = self.general_stats
             filtering_info_df['included'] = included_in_filtering
             filtering_info_df.index.name = "gene"
@@ -367,7 +367,6 @@ class ToilDataset():
 
         return gene_list.to_list(), gene_filtered_data_matrix
     
-
     # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
     def plot_filtering_histograms(self, filtering_info_df):        
         # Make a figure
@@ -412,7 +411,6 @@ class ToilDataset():
         fig.savefig(os.path.join(self.dataset_info_path, "filtering_histograms.png"), dpi = 300)
         plt.close(fig)
 
-
     # This function performs a data normalization 
     def batch_normalize(self):
         if self.batch_normalization=='None':
@@ -420,6 +418,7 @@ class ToilDataset():
             return
         else:
             print('Batch normalizing matrix data...')
+            start = time.time()
             # Define auxiliary tcga dataframe to obtain healthy tcga samples
             tcga_df = self.label_df[self.label_df['_study']=='TCGA']
             # Get the identifiers of the samples in each subset
@@ -445,10 +444,11 @@ class ToilDataset():
                 raise ValueError('Batch normalization should be None, normal or healthy_tcga.')
 
             normalized_joint = pd.concat([normalized_gtex, normalized_tcga], axis=1)
-            # Replace Nans generated by std division to 0's
+            # Replace NaNs generated by std division to 0's
             self.gene_filtered_data_matrix = normalized_joint.fillna(0.0)
+            end = time.time()
+            print(f'It took {round(end-start, 2)} s to batch normalize the data.')
         
-
     # This function modifies self.label_df and self.lab_txt_2_lab_num filtering by the specified tissue in self.tissue
     def filter_by_tissue(self):
         # If tissue is not specified, do not filter
@@ -660,27 +660,10 @@ class ToilDataset():
         plt.close()          
 
 
-
-
-# Test code for dataset declaration
-
-#test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
-#                                 dataset = 'both', 
-#                                 tissue='all', 
-#                                 mean_thr=-10, 
-#                                 std_thr=-1.0, 
-#                                 label_type = 'phenotype',
-#                                 batch_normalization='normal', # Can be 'None', 'normal', 'healthy_tcga'
-#                                 partition_seed=0,
-#                                 force_compute = False)
-
-#train_loader, val_loader, test_loader = test_toil_dataset.get_dataloaders(batch_size = 100)
-
-#breakpoint()
-
 class WangDataset():
-    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=0.5,
-                std_thr=0.5, partition_seed=0, force_compute = False):
+    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-1.0,
+                std_thr=0.01, rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None',
+                batch_normalization='None', partition_seed=0, force_compute = False):
 
         self.path = path
         self.tissue = tissue
@@ -692,6 +675,10 @@ class WangDataset():
                                               'tissue='+str(self.tissue))
         self.mean_thr = mean_thr
         self.std_thr = std_thr
+        self.rand_frac = rand_frac
+        self.sample_frac = sample_frac
+        self.gene_list_csv = gene_list_csv
+        self.batch_normalization = batch_normalization
         self.partition_seed = partition_seed # seed for train/val/test split
         self.force_compute = force_compute
 
@@ -700,26 +687,49 @@ class WangDataset():
         self.make_mappers()
         # Un-compress data
         self.unzip_data()
-        # Read data from the Toil data set
+        # Read data from the Wang data set and performs a log2(x+1) transformation
         self.matrix_data, self.categories = self.read_data()
+        # TODO: Add filter_wang_datasets() function
+        # FIXME: In this moment it is not possible to filter gtex or tcga data. It just works for both although dataset is specified as gtex or tcga
+        # # Filter toil datasets to use GTEx, TCGA or both. This part also takes out TARGET data
+        # self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
+        # Get labels dataframe and label dictionary. 
+        self.label_df, self.lab_txt_2_lab_num = self.find_labels()
+        # Find stats of each dataset segment
+        self.general_stats = self.find_general_stats()
+        # Filter genes based on mean, std and sample_frac. This also subsamples the resulting filtered gene list by self.rand_frac. 
+        # If self.gene_list_csv path is specified it works like a wildcard and CanDLE will train only with the genes in the csv path
+        self.filtered_gene_list, self.gene_filtered_data_matrix = self.filter_genes()
+        # Perform batch normalization, this uses self.find_general_stats() and normalizes self.gene_filtered_data_matrix  
+        self.batch_normalize()
+        # # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue # TODO: Add filter by tissue function
+        # self.filter_by_tissue()
+        # Make the problem binary in case self.binary_dict is not empty
+        self.make_binary_problem() # If self.binary_dict == {} this function does nothing
+        # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
+        self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
+
+        # Define number of classes for classification
+        self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
+
 
     def make_mappers(self):
         """
         This function generates mapper files useful for class definition in the dataset by running the make_mappers.py file
         """
         # Just make mappers if they are not already saved
-        if not os.path.exists(os.path.join(self.path, 'mappers', 'normal_tcga_2_gtex_mapper.json')):
+        if not os.path.exists(os.path.join(self.path, 'mappers', 'wang_standard_label_mapper.json')):
             # run main.py with subprocess
             command = f'python make_mappers.py'
             print(command)
             command = command.split()
-            subprocess.call(command) 
+            subprocess.call(command)
 
     # This function unzips the raw downloaded data from 
     def unzip_data(self):
         final_data_path = os.path.join(self.path, 'original_data')
         # Do nothing if unziped folder already exists
-        if os.path.exists(final_data_path):
+        if os.path.exists(final_data_path) and (self.force_compute==False):
             print('Files already unzipped...')
             return
         # Unzip data if original_data does not exist
@@ -735,7 +745,7 @@ class WangDataset():
             classes_paths = os.listdir(unzipped_folder)
             
             # Make final directory
-            os.mkdir(final_data_path)
+            os.makedirs(final_data_path, exist_ok=True)
             # Cycle to unzip original data
             for i in tqdm(range(len(classes_paths))):
                 class_path = classes_paths[i]
@@ -750,7 +760,7 @@ class WangDataset():
             # Remove temporal folder
             shutil.rmtree(unzipped_folder)
     
-    # This helper function recieves the file name of a class and returns a valid textual label
+    # This helper function receives the file name of a class and returns a valid textual label
     def get_label_from_name(self, name):
         str_list = name[:-4].split('-')
         if len(str_list) == 5:
@@ -761,13 +771,15 @@ class WangDataset():
             raise ValueError('The name of the original file is not adecuate.')
         label = label.upper()
 
-        # TODO: Use a mapper to pass to standard classes
         return label
 
     # This function reads the data
     def read_data(self):
         # If processed data directory does not exist read, merge and save complete data
-        if not os.path.exists(os.path.join(self.path, 'processed_data')):
+        if not os.path.exists(os.path.join(self.path, 'processed_data')) or (self.force_compute == True):
+            
+            print(f'Reading data from {os.path.join(self.path, "original_data")}')
+            start = time.time()
             data_path = os.path.join(self.path, 'original_data')
             # Declare list of paths where each class is hosted
             classes_paths = os.listdir(data_path)
@@ -785,34 +797,368 @@ class WangDataset():
                 act_df = act_df.loc[valid_gene_index, :]
 
                 act_category = self.get_label_from_name(class_file) # Get label names from file names
-                act_category_df = pd.DataFrame({'sample':act_df.columns, 'lab_txt': act_category})
+                act_category_df = pd.DataFrame({'sample':act_df.columns, 'original_lab': act_category}) # Put original label name
                 
-                # Join iteratevily data matrices
+                # Join iteratively data matrices
                 data_matrix = act_df if i==0 else data_matrix.join(act_df)
-                data_matrix = data_matrix.loc[valid_gene_index, :] # Ensure datamatrix just has common genes in all classes
+                data_matrix = data_matrix.loc[valid_gene_index, :] # Ensure data matrix just has common genes in all classes
                 category_df = act_category_df if i==0 else pd.concat([category_df, act_category_df], axis=0) # Join category dataframes
 
-            # Put gene at the begining column and resetting index to save in feather
-            data_matrix.insert(loc=0, column='Gene_Hugo_Symbol', value=data_matrix.index)
-            data_matrix = data_matrix.reset_index()
-            # Add a binary column to category_df indicating if the samples is from the TCGA
-            category_df['is_tcga'] = category_df['lab_txt'].str.contains('TCGA')
-            category_df = category_df.reset_index() # Reset index
+            # Sort Genes and samples in data matrix
+            data_matrix.sort_index(inplace=True) # Sort genes
+            data_matrix = data_matrix.T.sort_index().T # Sort samples
+            # Set samples as index and sort category dataframe
+            category_df.set_index('sample', inplace=True)
+            category_df.sort_index(inplace=True)
 
-            os.mkdir(os.path.join(self.path, 'processed_data'))
+
+            # Add a binary column to category_df indicating if the samples is from the TCGA
+            category_df['is_tcga'] = category_df['original_lab'].str.contains('TCGA')
+
+            # Loads standard label mapper
+            with open(os.path.join(self.path, "mappers", "wang_standard_label_mapper.json"), "r") as f:
+                standard_label_mapper = json.load(f)
+
+            # Add a column with the standard labels shared between all datasets (Toil, Wang and Recount3)
+            category_df['lab_txt'] = category_df['original_lab'].map(standard_label_mapper)
+
+            # Print time that was needed to read the data
+            end = time.time()
+            print(f'Time to read data: {round(end-start,2)} s')
+
+            # Log2(x+1) transform the data
+            tqdm.pandas(desc="Computing Log2(x+1) transform")
+            data_matrix = data_matrix.progress_apply(lambda x: np.log2(x+1))
+            
+            # Reset index to save in feather file
+            data_matrix.reset_index(inplace=True)
+
+            print(f'Saving processed data to {os.path.join(self.path, "processed_data")}')
+            os.makedirs(os.path.join(self.path, 'processed_data'), exist_ok=True)
             data_matrix.to_feather(os.path.join(self.path, 'processed_data', 'data_matrix.feather'))
             category_df.to_csv(os.path.join(self.path, 'processed_data', 'data_category.csv'))
+
+            # Set index again for next steps
+            data_matrix.set_index('Hugo_Symbol', inplace=True)
+
+            
         # If the data is already merged and stored load it from file
         else:
+            print(f'Loading processed data from {os.path.join(self.path, "processed_data")}')
             start = time.time()
             data_matrix = pd.read_feather(os.path.join(self.path, 'processed_data', 'data_matrix.feather'))
-            category_df = pd.read_csv(os.path.join(self.path, 'processed_data', 'data_category.csv'))
+            category_df = pd.read_csv(os.path.join(self.path, 'processed_data', 'data_category.csv'), index_col='sample')
             end = time.time()
-            del category_df['Unnamed: 0']
-            del category_df['index']
-            print('Time to read data: {} s'.format(round(end-start,2)))
-        
+            print(f'Time to read data: {round(end-start,2)} s')
+            data_matrix.set_index('Hugo_Symbol', inplace=True)
+
         return data_matrix, category_df
 
+    # This function extracts the labels from categories and returns a label dataframe and a dictionary of textual labels to numeric labels
+    def find_labels(self):
 
-# test_wang = WangDataset(os.path.join('data', 'wang_data'))
+        # Make dataset directory if it does not exist
+        os.makedirs(self.dataset_info_path, exist_ok = True)
+
+        # TODO: Change this for a filtered categories dataframe filtering by dataset
+        label_df = self.categories
+
+        # Get unique textual labels obtained and sort them
+        current_labels = sorted(label_df["lab_txt"].unique().tolist())
+        # Define lab_txt_2_lab_num dictionary
+        lab_txt_2_lab_num = {lab_txt: i for i, lab_txt in enumerate(current_labels)}
+
+        # Define numeric labels from the textual labels in label_df
+        label_df["lab_num"] = label_df["lab_txt"].map(lab_txt_2_lab_num)
+        
+        # Save lab_txt_2_lab_num dictionary to json file
+        with open(os.path.join(self.dataset_info_path, "lab_txt_2_lab_num_mapper.json"), "w") as f:
+            json.dump(lab_txt_2_lab_num, f, indent = 4)
+
+        return label_df, lab_txt_2_lab_num
+
+    # This function finds the mean expression, std and expressed sample fraction for GTEx, TCGA, healthy TCGA and the joint dataset
+    def find_general_stats(self):
+        # If the info stats are already computed load them from file
+        if (os.path.exists(os.path.join(self.path, 'general_stats.csv'))) & (self.force_compute == False):
+            print('Loading general stats from '+os.path.join(self.path, 'general_stats.csv'))
+            general_stats = pd.read_csv(os.path.join(self.path, 'general_stats.csv'), index_col = 0)
+        # If the stats are not computed compute them and save them in file
+        else:
+            print('Computing general stats and saving to '+os.path.join(self.path, 'general_stats.csv'))
+            # Define auxiliary tcga dataframe to obtain healthy tcga samples
+            tcga_df = self.label_df[self.label_df['is_tcga']]
+
+            # Get the identifiers of the samples in each subset
+            gtex_samples = self.label_df[self.label_df['is_tcga']==False].index
+            tcga_samples = tcga_df.index
+            healthy_tcga_samples = tcga_df[tcga_df['lab_txt'].str.contains('GTEX')].index
+            joint_samples = self.label_df.index
+
+            # Compute the mean of the subsets
+            tqdm.pandas(desc="Computing Mean GTEx")
+            gtex_mean = self.matrix_data.loc[:, gtex_samples].progress_apply(np.mean, axis = 1).to_frame(name='gtex_mean')
+            tqdm.pandas(desc="Computing Mean TCGA")
+            tcga_mean = self.matrix_data.loc[:, tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='tcga_mean')
+            tqdm.pandas(desc="Computing Mean Healthy TCGA")
+            healthy_tcga_mean = self.matrix_data.loc[:, healthy_tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='healthy_tcga_mean')
+            tqdm.pandas(desc="Computing Joint Mean")
+            joint_mean = self.matrix_data.loc[:, joint_samples].progress_apply(np.mean, axis = 1).to_frame(name='joint_mean')
+
+            # Compute the std of the subsets
+            tqdm.pandas(desc="Computing std GTEx")
+            gtex_std = self.matrix_data.loc[:, gtex_samples].progress_apply(np.std, axis = 1).to_frame(name='gtex_std')
+            tqdm.pandas(desc="Computing std TCGA")
+            tcga_std = self.matrix_data.loc[:, tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='tcga_std')
+            tqdm.pandas(desc="Computing std Healthy TCGA")
+            healthy_tcga_std = self.matrix_data.loc[:, healthy_tcga_samples].progress_apply(np.std, axis = 1).to_frame(name='healthy_tcga_std')
+            tqdm.pandas(desc="Computing Joint std")
+            joint_std = self.matrix_data.loc[:, joint_samples].progress_apply(np.std, axis = 1).to_frame(name='joint_std')
+
+            # Compute the fraction of samples where a gene is expressed
+            print('Computing fraction of samples where each gene is expressed ...')
+            min_val = self.matrix_data.min().min() # Get minimum value
+            tqdm.pandas(desc="Computing Expressed Genes")
+            expressed_matrix = self.matrix_data.progress_apply(lambda x: x>min_val, axis = 1) # Compute expressed positions
+            
+            # Compute expressed sample fractions for all subsets
+            tqdm.pandas(desc="Computing Joint Expressed Sample Fraction")
+            joint_sample_fraction = expressed_matrix.progress_apply(np.mean, axis = 1).to_frame(name='joint_sample_frac')
+            tqdm.pandas(desc="Computing GTEx Expressed Sample Fraction")
+            gtex_sample_fraction = expressed_matrix.loc[:, gtex_samples].progress_apply(np.mean, axis = 1).to_frame(name='gtex_sample_frac')
+            tqdm.pandas(desc="Computing TCGA Expressed Sample Fraction")
+            tcga_sample_fraction = expressed_matrix.loc[:, tcga_samples].progress_apply(np.mean, axis = 1).to_frame(name='tcga_sample_frac')
+            
+
+            # Join stats in single dataframe
+            general_stats = pd.concat([gtex_mean, tcga_mean, healthy_tcga_mean, joint_mean,
+                                        gtex_std, tcga_std, healthy_tcga_std, joint_std,
+                                        joint_sample_fraction, gtex_sample_fraction, tcga_sample_fraction,], axis=1)
+            general_stats.to_csv(os.path.join(self.path, 'general_stats.csv'))
+
+        return general_stats
+
+    # This function filters out genes by mean, standard deviation, expression fraction, random fraction or list of genes
+    def filter_genes(self):
+        # If there is a gene list specified by parameter then it overwrites mean, std and rand_frac filtering  
+        if self.gene_list_csv != 'None':
+            # Print user message
+            print(f'CanDLE will train with the list of genes specified in {self.gene_list_csv}')
+            gene_csv_df = pd.read_csv(self.gene_list_csv, index_col=0)
+            gene_list = pd.Index(gene_csv_df['gene_name'])
+        
+        # If no list of genes is specified then proceed with mean, std, sample_frac and rand_frac filtering
+        elif (not os.path.exists(os.path.join(self.dataset_info_path, "filtering_info.csv"))) or self.force_compute:
+            
+            print("Computing list of filtered genes. And saving filtering info to:\n\t"+ os.path.join(self.dataset_info_path, "filtering_info.csv"))
+            
+            # Find the indices of the samples with mean, standard deviation and sample fractions that fulfill the thresholds
+            mean_bool_index = ((self.general_stats['joint_mean']>self.mean_thr) & (self.general_stats['gtex_mean']>self.mean_thr) & (self.general_stats['tcga_mean']>self.mean_thr))
+            std_bool_index = ((self.general_stats['joint_std']>self.std_thr) & (self.general_stats['gtex_std']>self.std_thr) & (self.general_stats['tcga_std']>self.std_thr))
+            sample_frac_bool_index = ((self.general_stats['joint_sample_frac'] > self.sample_frac) & (self.general_stats['gtex_sample_frac'] > self.sample_frac) & (self.general_stats['tcga_sample_frac'] > self.sample_frac))
+            
+            # Compute intersection of mean_data_index and std_data_index
+            mean_std_sample_index = np.logical_and.reduce((mean_bool_index.values, std_bool_index.values, sample_frac_bool_index)).ravel()
+            # Make a gene list of the samples that fulfill the thresholds
+            gene_list = self.matrix_data.index[mean_std_sample_index]
+
+            # Subsample gene list in case self.rand_frac < 1
+            if self.rand_frac < 1:
+                np.random.seed(0) # Ensure reproducibility # TODO: Parametrize this seed to run variation experiments
+                rand_selector = np.zeros(len(gene_list))
+                rand_selector[:int(len(gene_list)*self.rand_frac)] = 1
+                np.random.shuffle(rand_selector) # Shuffle boolean selector
+                rand_selector = np.array(rand_selector, dtype=bool)
+                gene_list = gene_list[rand_selector] # Filter gene list based in rand_selector
+            
+            # Compute boolean value for each gene that indicates if it was included in the filtered gene list
+            included_in_filtering = self.general_stats.index.isin(gene_list)
+
+            # Merge all statistics and included_in_filtering into a final dataframe
+            filtering_info_df = self.general_stats
+            filtering_info_df['included'] = included_in_filtering
+            filtering_info_df.index.name = "gene"
+
+            # Save the filtering info to files
+            filtering_info_df.to_csv(os.path.join(self.dataset_info_path, "filtering_info.csv"), index = True)
+            # Plot histograms with plot_filtering_histograms()
+            self.plot_filtering_histograms(filtering_info_df)
+
+        else:
+            print("Loading filtering info from:\n\t" + os.path.join(self.dataset_info_path, "filtering_info.csv"))
+            filtering_info_df = pd.read_csv(os.path.join(self.dataset_info_path, "filtering_info.csv"), index_col = 0)
+            # get indices of filtering_info_df that are True in the included column
+            gene_list = filtering_info_df.index[filtering_info_df["included"].values == True]
+            # Plot histograms with plot_filtering_histograms()
+            self.plot_filtering_histograms(filtering_info_df)
+        
+        # Filter tha data matrix based on the gene list
+        gene_filtered_data_matrix = self.matrix_data.loc[gene_list, :]
+
+        print("Currently working with {} genes...".format(gene_filtered_data_matrix.shape[0]))
+
+        return gene_list.to_list(), gene_filtered_data_matrix
+    
+    # This function performs a data normalization by batches (GTEX or TCGA) 
+    def batch_normalize(self):
+        if self.batch_normalization=='None':
+            print('Did not perform batch normalization...')
+            return
+        else:
+            print('Batch normalizing matrix data...')
+            start = time.time()
+            # Get the identifiers of the samples in each subset
+            gtex_samples = self.label_df[self.label_df['is_tcga']==False].index
+            tcga_samples = self.label_df[self.label_df['is_tcga']==True].index
+            # Get stats of the valid genes
+            valid_stats = self.general_stats.loc[self.filtered_gene_list, :]
+
+            # Transforms GTEx data
+            normalized_gtex = self.gene_filtered_data_matrix[gtex_samples].sub(valid_stats['gtex_mean'], axis=0)
+            normalized_gtex = normalized_gtex.div(valid_stats['gtex_std'], axis=0)
+           
+           # Transform TCGA data according to self.batch_normalization
+            if self.batch_normalization=='normal':
+                normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['tcga_mean'], axis=0)
+                normalized_tcga = normalized_tcga.div(valid_stats['tcga_std'], axis=0)
+            
+            elif self.batch_normalization=='healthy_tcga':
+                normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['healthy_tcga_mean'], axis=0)
+                normalized_tcga = normalized_tcga.div(valid_stats['healthy_tcga_std'], axis=0)
+            
+            else:
+                raise ValueError('Batch normalization should be None, normal or healthy_tcga.')
+
+            normalized_joint = pd.concat([normalized_gtex, normalized_tcga], axis=1)
+
+            # Sort columns of normalized joint
+            normalized_joint = normalized_joint.T.sort_index().T
+
+            # Replace NaNs generated by std division to 0's
+            self.gene_filtered_data_matrix = normalized_joint.fillna(0.0)
+            end = time.time()
+            print(f'It took {round(end-start, 2)} s to batch normalize the data.')
+
+    # This function uses self.binary_dict to modify self.label_df and self.lab_txt_2_lab_num to make the labels binary
+    def make_binary_problem(self):
+        # If binary_dict is not specified, do not make binary
+        if self.binary_dict == {}:
+            print("No binary problem specified.")
+            return
+        # If binary_dict is specified, make binary
+        else:
+            self.lab_txt_2_lab_num = self.binary_dict
+            # Define numeric labels from the textual labels in self.label_df
+            self.label_df["lab_num"] = self.label_df["lab_txt"].map(self.lab_txt_2_lab_num)   
+            print("Made binary problem.")
+            print(f"Number of samples in class 0: {len(self.label_df[self.label_df['lab_num'] == 0])}, number of samples in class 1: {len(self.label_df[self.label_df['lab_num'] == 1])}")
+            return
+
+    # This function uses self.label_df to split the data into train, validation and test sets
+    def split_data(self):
+        train_val_lab, test_lab = train_test_split(self.label_df["lab_num"], test_size = 0.2, random_state = self.partition_seed, stratify = self.label_df["lab_num"].values)
+        train_lab, val_lab = train_test_split(train_val_lab, test_size = 0.25, random_state = self.partition_seed, stratify = train_val_lab.values)
+        # Use label indexes to subset the data in self.matrix_data_filtered
+        train_matrix = self.gene_filtered_data_matrix[train_lab.index]
+        val_matrix = self.gene_filtered_data_matrix[val_lab.index]
+        test_matrix = self.gene_filtered_data_matrix[test_lab.index]
+        train_val_matrix = self.gene_filtered_data_matrix[train_val_lab.index]
+        # Declare label dictionaries
+        split_labels = {"train": train_lab, "val": val_lab, "test": test_lab, "train_val": train_val_lab}
+        # Declare matrix dictionaries
+        split_matrices = {"train": train_matrix, "val": val_matrix, "test": test_matrix, "train_val": train_val_matrix}
+        # Both matrixes and labels are already shuffled
+        return split_labels, split_matrices
+
+    # This function gets the dataloaders for the train, val and test sets
+    def get_dataloaders(self, batch_size):
+        # Select data partitions
+        # These data matrices have samples in rows and genes in columns
+        x_train = torch.Tensor(self.split_matrices["train"].T.values).type(torch.float)
+        x_val = torch.Tensor(self.split_matrices["val"].T.values).type(torch.float)
+        x_test = torch.Tensor(self.split_matrices["test"].T.values).type(torch.float)
+        
+        # Cast labels as tensors
+        y_train = torch.Tensor(self.split_labels["train"].values).type(torch.long)
+        y_val = torch.Tensor(self.split_labels["val"].values).type(torch.long)
+        y_test = torch.Tensor(self.split_labels["test"].values).type(torch.long)
+
+        # Define train, val and test datasets
+        train_dataset = TensorDataset(x_train, y_train)
+        val_dataset = TensorDataset(x_val, y_val)
+        test_dataset = TensorDataset(x_test, y_test)
+
+        # Create dataloaders
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+        return train_loader, val_loader, test_loader
+
+    # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
+    def plot_filtering_histograms(self, filtering_info_df):        
+        # Make a figure
+        fig, axes = plt.subplots(2, 2, figsize = (18, 12))
+        fig.suptitle("Filtering of Mean > " +str(self.mean_thr) + " and Standard Deviation > " + str(self.std_thr) , fontsize = 30)
+        # Variable to adjust display height of the histograms
+        max_hist = np.zeros((2, 2))
+
+        # Plot the histograms of mean and standard deviation before filtering
+        n, _, _ = axes[0, 0].hist(filtering_info_df["joint_mean"], bins = 50, color = "k", density=True)
+        max_hist[0, 0] = np.max(n)
+        axes[0, 0].set_title("Before filtering", fontsize = 26)        
+        n, _, _ = axes[1, 0].hist(filtering_info_df["joint_std"], bins = 50, color = "k", density=True)
+        max_hist[1, 0] = np.max(n)
+        # Plot the histograms of mean and standard deviation after filtering
+        n, _, _ = axes[0, 1].hist(filtering_info_df["joint_mean"][filtering_info_df["included"]==True], bins = 50, color = "k", density=True)
+        max_hist[0, 1] = np.max(n)
+        axes[0, 1].set_title("After filtering", fontsize = 26)
+        n, _, _ = axes[1, 1].hist(filtering_info_df["joint_std"][filtering_info_df["included"]==True], bins = 50, color = "k", density=True)
+        max_hist[1, 1] = np.max(n)
+
+        # Format axes
+        for i in range(2):
+            for j in range(2):
+                axes[i, j].set_ylabel("Density", fontsize = 16)
+                axes[i, j].tick_params(labelsize = 14)
+                axes[i, j].grid(True)
+                axes[i, j].set_axisbelow(True)
+                axes[i, j].set_ylim(0, max_hist[i, j] * 1.1)
+                # Handle mean expression plots
+                if i == 0:
+                    axes[i, j].set_xlabel("Mean expression", fontsize = 16)
+                    axes[i, j].set_xlim(filtering_info_df["joint_mean"].min(), filtering_info_df["joint_mean"].max())
+                    axes[i, j].plot([self.mean_thr, self.mean_thr], [0, 1.2*max_hist[i,j]], color = "r", linestyle = "--")
+                # Handle standard deviation plots
+                else:
+                    axes[i, j].set_xlabel("Standard deviation", fontsize = 16)
+                    axes[i, j].set_xlim(filtering_info_df["joint_std"].min(), filtering_info_df["joint_std"].max())
+                    axes[i, j].plot([self.std_thr, self.std_thr], [0, 1.2*max_hist[i,j]], color = "r", linestyle = "--")
+
+        # Save the figure
+        fig.savefig(os.path.join(self.dataset_info_path, "filtering_histograms.png"), dpi = 300)
+        plt.close(fig)
+
+
+# Test code for dataset declaration
+
+#test_toil_dataset = ToilDataset(os.path.join("data", "toil_data"),
+#                                 dataset = 'both', 
+#                                 tissue='all', 
+#                                 mean_thr=-10, 
+#                                 std_thr=-1.0, 
+#                                 label_type = 'phenotype',
+#                                 batch_normalization='normal', # Can be 'None', 'normal', 'healthy_tcga'
+#                                 partition_seed=0,
+#                                 force_compute = False)
+
+#train_loader, val_loader, test_loader = test_toil_dataset.get_dataloaders(batch_size = 100)
+# breakpoint()
+    
+# test_toil = ToilDataset(os.path.join("data", "toil_data"), batch_normalization='normal', force_compute=False)
+# test_wang = WangDataset(os.path.join('data', 'wang_data'), batch_normalization='normal', force_compute=False)
+# print(test_wang.categories)
+# print(test_wang.general_stats)
+# print(test_wang.gene_filtered_data_matrix)
+# train_loader, val_loader, test_loader = test_wang.get_dataloaders(batch_size = 100)
+# breakpoint()
