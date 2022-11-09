@@ -22,10 +22,11 @@ import argparse
 # Create the parser
 parser = argparse.ArgumentParser()
 # Add an argument
-parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                      choices=["both", "tcga", "gtex"])
-parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                             choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
-parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multi-class problem, if other string solves a binary problem with this as the positive class.",     choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
-parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                              choices=["None", "normal", "healthy_tcga"])
+parser.add_argument('--source',         type=str,   default="toil",         help="Data source to use",                                                                                                                                                                              choices=["toil", "wang"])
+parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                                                                                                  choices=["both", "tcga", "gtex"])
+parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data. Note that the choices for source wang are limited by the available classes.",                                                                                                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
+parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multi-class problem, if other string solves a binary problem with this as the positive class. Note that the choices for source wang are limited by the available classes.",     choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
+parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                                                                                                          choices=["None", "normal", "healthy_tcga"])
 parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression strictly greater.")
 parser.add_argument('--std_thr',        type=float, default=0.0,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std strictly greater.")
 parser.add_argument('--rand_frac',      type=float, default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
@@ -58,20 +59,24 @@ else:
     binary_dict = {label: 0 for label in complete_label_list}
     binary_dict[args.all_vs_one] = 1
 
-# Declare dataset
-dataset = ToilDataset(os.path.join("data", "toil_data"),
-                            dataset = args.dataset,
-                            tissue = args.tissue,
-                            binary_dict=binary_dict,
-                            mean_thr = args.mean_thr,
-                            std_thr = args.std_thr,
-                            rand_frac = args.rand_frac,
-                            sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,
-                            label_type = 'phenotype',
-                            batch_normalization=args.batch_norm,
-                            partition_seed = args.seed,
+# Declare dataset depending on the source
+if args.source == 'toil':
+    dataset = ToilDataset(  os.path.join('data', 'toil_data'),      dataset = args.dataset,
+                            tissue = args.tissue,                   binary_dict=binary_dict,
+                            mean_thr = args.mean_thr,               std_thr = args.std_thr,
+                            rand_frac = args.rand_frac,             sample_frac=args.sample_frac,
+                            gene_list_csv = args.gene_list_csv,     label_type = 'phenotype',
+                            batch_normalization=args.batch_norm,    partition_seed = args.seed,
                             force_compute = False)
+
+elif args.source == 'wang':
+    dataset = WangDataset(  os.path.join('data', 'wang_data'),      dataset = args.dataset,
+                            tissue = args.tissue,                   binary_dict=binary_dict,
+                            mean_thr = args.mean_thr,               std_thr = args.std_thr,
+                            rand_frac = args.rand_frac,             sample_frac=args.sample_frac,
+                            gene_list_csv = args.gene_list_csv,     batch_normalization=args.batch_norm,
+                            partition_seed = args.seed,             force_compute = False)
+
                             
 # Dataloader declaration
 train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = args.batch_size)
@@ -248,7 +253,9 @@ if ((args.mode == 'test') or (args.mode == 'both')) & (args.epochs>-1):
     # This is the code for the interpretation of one model of candle
     # Get model weights 
     weight_matrix = model.out.weight.detach().cpu().numpy()
-    tcga_weight_matrix = weight_matrix[30:, :]
+    # Get indexes where there is a cancer class
+    tcga_indexes = [val for key, val in dataset.lab_txt_2_lab_num.items() if 'TCGA' in key]
+    tcga_weight_matrix = weight_matrix[tcga_indexes, :]
 
     # Code to sort gene weights for each class
     gene_names = np.array(dataset.filtered_gene_list) # Get original gene names
@@ -289,7 +296,7 @@ if ((args.mode == 'test') or (args.mode == 'both')) & (args.epochs>-1):
     pd.DataFrame(rank_frec_df).to_csv(os.path.join('Rankings','1_candle_ranking.csv'))
 
     # Make scatter plot of weights of a single random class
-    rand_int = np.random.randint(0,33)
+    rand_int = np.random.randint(0,len(tcga_indexes))
     threshold = sorted_tcga_weight_matrix[rand_int, k]
     plt.figure()
     plt.plot(tcga_weight_matrix[rand_int], '.k', markersize=2, alpha=0.4)
