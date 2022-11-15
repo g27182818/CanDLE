@@ -76,8 +76,7 @@ elif args.source == 'wang':
                             rand_frac = args.rand_frac,             sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,     batch_normalization=args.batch_norm,
                             partition_seed = args.seed,             force_compute = False)
-
-                            
+                   
 # Dataloader declaration
 train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = args.batch_size)
 
