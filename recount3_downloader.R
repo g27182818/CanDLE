@@ -77,11 +77,11 @@ for (i in 1:length(tcga_accessions)){
 global_data <- cbind(gtex_global_data, tcga_global_data)
 
 # create data directory
-dir.create(file.path("data", "recount3_data"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path("data", "recount3_data", 'original_data'), recursive = TRUE, showWarnings = FALSE)
 
 # Save data
-cat("Writing data to", file.path("data", "recount3_data"), "directory\n")
-write_feather(as.data.frame(global_data), file.path("data", "recount3_data", "data_matrix.feather"))
-write.csv(gtex_global_metadata, file.path("data", "recount3_data", "gtex_metadata.csv"))
-write.csv(tcga_global_metadata, file.path("data", "recount3_data", "tcga_metadata.csv"))
-write.csv(rowRanges(rse_gene), file.path("data", "recount3_data", "gene_metadata.csv"))
+cat("Writing data to", file.path("data", "recount3_data", 'original_data'), "directory\n")
+write_feather(as.data.frame(global_data), file.path("data", "recount3_data", 'original_data', "data_matrix.feather"))
+write.csv(gtex_global_metadata, file.path("data", "recount3_data", 'original_data', "gtex_metadata.csv"))
+write.csv(tcga_global_metadata, file.path("data", "recount3_data", 'original_data', "tcga_metadata.csv"))
+write.csv(rowRanges(rse_gene), file.path("data", "recount3_data", 'original_data', "gene_metadata.csv"))

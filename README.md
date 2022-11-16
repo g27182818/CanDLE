@@ -40,6 +40,11 @@ R # This should open an R session
 install.packages("rlang")
 install.packages("UCSCXenaTools") # Can take a few minutes
 install.packages('feather')
+install.packages("pacman")
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("recount")  # May take several minutes
+BiocManager::install("recount3") # May take several minutes
 quit() # This will end the R session you don't need to save workspace (n)
 ```
 

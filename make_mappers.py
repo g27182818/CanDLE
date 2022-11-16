@@ -243,24 +243,6 @@ id_2_tissue_mapper = {  'GTEX-ADI':             'Connective', # Model for connec
                         'TCGA-UCEC':            'Uterus',
                         'TCGA-UVM':             'Not Paired'} # Uveal melanoma
 
-# wang_normal_tcga_mapper = { 'blca': 'bladder',
-#                             'brca': 'breast',
-#                             'cesc': 'cervix',
-#                             'coad': 'colon',
-#                             'esca': 'esophagus',
-#                             'hnsc': 'salivary',
-#                             'kich': 'kidney',
-#                             'kirc': 'kidney',
-#                             'kirp': 'kidney',
-#                             'lihc': 'liver',
-#                             'luad': 'lung',
-#                             'lusc': 'lung',
-#                             'prad': 'prostate',
-#                             'read': 'colon',
-#                             'stad': 'stomach',
-#                             'thca': 'thyroid',
-#                             'ucec': 'uterus',
-#                             'ucs':  'uterus'}
 
 wang_standard_label_mapper = {  'GTEX-BLADDER':         'GTEX-BLA',
                                 'GTEX-BREAST':          'GTEX-BRE',
@@ -314,13 +296,94 @@ wang_standard_label_mapper = {  'GTEX-BLADDER':         'GTEX-BLA',
                                 'TCGA-T-UCS':           'TCGA-UCS'}
 
 
+recount3_gtex_mapper = {'Adipose - Subcutaneous':                       'GTEX-ADI', 
+                        'Adipose - Visceral (Omentum)':                 'GTEX-ADI',
+                        'Adrenal Gland':                                'GTEX-ADR_GLA',
+                        'Artery - Aorta':                               'GTEX-BLO_VSL',
+                        'Artery - Coronary':                            'GTEX-BLO_VSL',
+                        'Artery - Tibial':                              'GTEX-BLO_VSL',
+                        'Bladder':                                      'GTEX-BLA',
+                        'Brain - Amygdala':                             'GTEX-BRA',
+                        'Brain - Anterior cingulate cortex (BA24)':     'GTEX-BRA',
+                        'Brain - Caudate (basal ganglia)':              'GTEX-BRA',
+                        'Brain - Cerebellar Hemisphere':                'GTEX-BRA',
+                        'Brain - Cerebellum':                           'GTEX-BRA',
+                        'Brain - Cortex':                               'GTEX-BRA',
+                        'Brain - Frontal Cortex (BA9)':                 'GTEX-BRA',
+                        'Brain - Hippocampus':                          'GTEX-BRA',
+                        'Brain - Hypothalamus':                         'GTEX-BRA',
+                        'Brain - Nucleus accumbens (basal ganglia)':    'GTEX-BRA',
+                        'Brain - Putamen (basal ganglia)':              'GTEX-BRA',
+                        'Brain - Spinal cord (cervical c-1)':           'GTEX-BRA',
+                        'Brain - Substantia nigra':                     'GTEX-BRA',
+                        'Breast - Mammary Tissue':                      'GTEX-BRE',
+                        'Cells - Cultured fibroblasts':                 'GTEX-SKI',
+                        'Cells - EBV-transformed lymphocytes':          'GTEX-BLO',
+                        'Cells - Leukemia cell line (CML)':             'TCGA-LAML', # TODO: Know what to do with this category. This is a problematic category because it is GTEX but appears to be of sick patients
+                        'Cervix - Ectocervix':                          'GTEX-CER',
+                        'Cervix - Endocervix':                          'GTEX-CER',
+                        'Colon - Sigmoid':                              'GTEX-COL',
+                        'Colon - Transverse':                           'GTEX-COL',
+                        'Esophagus - Gastroesophageal Junction':        'GTEX-ESO',
+                        'Esophagus - Mucosa':                           'GTEX-ESO',
+                        'Esophagus - Muscularis':                       'GTEX-ESO',
+                        'Fallopian Tube':                               'GTEX-FAL_TUB',
+                        'Heart - Atrial Appendage':                     'GTEX-HEA',
+                        'Heart - Left Ventricle':                       'GTEX-HEA',
+                        'Kidney - Cortex':                              'GTEX-KID',
+                        'Kidney - Medulla':                             'GTEX_KID',
+                        'Liver':                                        'GTEX-LIV',
+                        'Lung':                                         'GTEX-LUN',
+                        'Minor Salivary Gland':                         'GTEX-SAL_GLA',
+                        'Muscle - Skeletal':                            'GTEX-MUS',
+                        'Nerve - Tibial':                               'GTEX-NER',
+                        'Ovary':                                        'GTEX-OVA',
+                        'Pancreas':                                     'GTEX-PAN',
+                        'Pituitary':                                    'GTEX-PIT',
+                        'Prostate':                                     'GTEX-PRO',
+                        'Skin - Not Sun Exposed (Suprapubic)':          'GTEX-SKI',
+                        'Skin - Sun Exposed (Lower leg)':               'GTEX-SKI',
+                        'Small Intestine - Terminal Ileum':             'GTEX-SMA_INT',
+                        'Spleen':                                       'GTEX-SPL',
+                        'Stomach':                                      'GTEX-STO',
+                        'Testis':                                       'GTEX-TES',
+                        'Thyroid':                                      'GTEX-THY',
+                        'Uterus':                                       'GTEX-UTE',
+                        'Vagina':                                       'GTEX-VAG',
+                        'Whole Blood':                                  'GTEX-BLO'
+                    }
+
+# There are a total of 57/740 problematic samples
+recount3_normal_tcga_mapper = { 'Adrenal Gland':        'GTEX-ADR_GLA',
+                                'Bile Duct':            'GTEX-LIV',     # Problematic 9 samples
+                                'Bladder':              'GTEX-BLA',
+                                'Brain':                'GTEX-BRA',
+                                'Breast':               'GTEX-BRE',
+                                'Cervix':               'GTEX-CER',
+                                'Colorectal':           'GTEX-COL',
+                                'Esophagus':            'GTEX-ESO',
+                                'Head and Neck':        'GTEX-SKI',     # Problematic 44 samples (Squamous cells are found in the outer layer of skin and in the mucous membranes)
+                                'Kidney':               'GTEX-KID',
+                                'Liver':                'GTEX-LIV',
+                                'Lung':                 'GTEX-LUN',
+                                'Pancreas':             'GTEX-PAN',
+                                'Prostate':             'GTEX-PRO',
+                                'Skin':                 'GTEX-SKI',
+                                'Soft Tissue':          'GTEX-ADI',     # Problematic 2 samples
+                                'Stomach':              'GTEX-STO',
+                                'Thymus':               'GTEX-SKI',     # Problematic 2 samples (Thymoma and thymic carcinoma, also called thymic epithelial tumors (TETs))
+                                'Thyroid':              'GTEX-THY',
+                                'Uterus':               'GTEX-UTE'
+                                }
+
+
 # Create mapper directory if there is not one
-if not os.path.exists(os.path.join("data", "toil_data", "mappers")):
-    os.makedirs(os.path.join("data", "toil_data", "mappers"))
+os.makedirs(os.path.join("data", "toil_data", "mappers"), exist_ok=True)
+os.makedirs(os.path.join("data", "wang_data", "mappers"), exist_ok=True)
+os.makedirs(os.path.join("data", "recount3_data", "mappers"), exist_ok=True)
 
-if not os.path.exists(os.path.join("data", "wang_data", "mappers")):
-    os.makedirs(os.path.join("data", "wang_data", "mappers"))
 
+# FIXME: The names of the files should be much more standar
 
 # Save normal_tcga_mapper mappers to file
 with open(os.path.join("data", "toil_data", "mappers", "normal_tcga_2_gtex_mapper.json"), 'w') as f:
@@ -336,6 +399,12 @@ with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"
     json.dump(id_2_tissue_mapper, f, indent=4)
 
 
-# Save normal_tcga_mapper mappers to file
+# Save wang_standard mapper to file
 with open(os.path.join("data", "wang_data", "mappers", "wang_standard_label_mapper.json"), 'w') as f:
     json.dump(wang_standard_label_mapper, f, indent=4)
+
+# Save recount3_standard mapper to file
+with open(os.path.join("data", "recount3_data", "mappers", "recount3_gtex_mapper.json"), 'w') as f:
+    json.dump(recount3_gtex_mapper, f, indent=4)
+with open(os.path.join("data", "recount3_data", "mappers", "healthy_tcga_2_gtex_mapper.json"), 'w') as f:
+    json.dump(recount3_normal_tcga_mapper, f, indent=4)

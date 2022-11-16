@@ -2,7 +2,7 @@
 # GPU to use
 GPU=0
 # Dataset parameters #####################################
-SOURCE=toil
+SOURCE=recount3
 DATASET=both
 TISSUE=all
 ALL_VS_ONE=False
@@ -18,7 +18,7 @@ WEIGHTS=True
 BATCH_SIZE=100
 EPOCHS=20
 # Paths ###################################################
-EXP_NAME=CanDLE_classification_toil_norm
+EXP_NAME=CanDLE_classification_recount3_norm
 # Mode ####################################################
 MODE=both # train, test or both
 

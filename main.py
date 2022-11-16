@@ -22,7 +22,7 @@ import argparse
 # Create the parser
 parser = argparse.ArgumentParser()
 # Add an argument
-parser.add_argument('--source',         type=str,   default="toil",         help="Data source to use",                                                                                                                                                                              choices=["toil", "wang"])
+parser.add_argument('--source',         type=str,   default="toil",         help="Data source to use",                                                                                                                                                                              choices=["toil", "wang","recount3"])
 parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                                                                                                  choices=["both", "tcga", "gtex"])
 parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data. Note that the choices for source wang are limited by the available classes.",                                                                                                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
 parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multi-class problem, if other string solves a binary problem with this as the positive class. Note that the choices for source wang are limited by the available classes.",     choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
@@ -71,6 +71,14 @@ if args.source == 'toil':
 
 elif args.source == 'wang':
     dataset = WangDataset(  os.path.join('data', 'wang_data'),      dataset = args.dataset,
+                            tissue = args.tissue,                   binary_dict=binary_dict,
+                            mean_thr = args.mean_thr,               std_thr = args.std_thr,
+                            rand_frac = args.rand_frac,             sample_frac=args.sample_frac,
+                            gene_list_csv = args.gene_list_csv,     batch_normalization=args.batch_norm,
+                            partition_seed = args.seed,             force_compute = False)
+
+elif args.source == 'recount3':
+    dataset = Recount3Dataset(  os.path.join('data', 'recount3_data'),      dataset = args.dataset,
                             tissue = args.tissue,                   binary_dict=binary_dict,
                             mean_thr = args.mean_thr,               std_thr = args.std_thr,
                             rand_frac = args.rand_frac,             sample_frac=args.sample_frac,
