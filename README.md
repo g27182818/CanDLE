@@ -121,6 +121,7 @@ pip install pyarrow
 pip install adjustText
 pip install sklearn
 pip install tqdm
+pip install umap-learn
 ```
 
 **Note:**

@@ -146,8 +146,8 @@ def print_epoch(train_dict, test_dict, loss, epoch, path):
     """
     This function prints in terminal a table with all available metrics in all test groups (train, test) for an specific epoch.
     It also writes this table to the training log specified in path.
-    :param train_dict: (Dict) Dictionary containing the train set metrics acording to the test() function.
-    :param test_dict: (Dict) Dictionary containing the test set metrics acording to the test() function.
+    :param train_dict: (Dict) Dictionary containing the train set metrics according to the test() function.
+    :param test_dict: (Dict) Dictionary containing the test set metrics according to the test() function.
     :param loss: (float) Mean epoch loss value.
     :param epoch: (int) Epoch number.
     :param path: (str) Training log path.
@@ -157,7 +157,7 @@ def print_epoch(train_dict, test_dict, loss, epoch, path):
     headers = []
     counter = 0
 
-    # Construccion of the metrics table
+    # Construction of the metrics table
     for k in train_dict.keys():
         # Handle metrics that cannot be printed
         if (k == "conf_matrix") or (k == "AP_list") or (k == "epoch") or (k == "pr_curve"):

@@ -1,4 +1,3 @@
-from operator import index
 import subprocess
 import tqdm
 import pandas as pd
@@ -6,11 +5,19 @@ import numpy as np
 import os
 import time
 import json
+import pickle as pkl
 import torch
 import zipfile
 import gzip
 import shutil
 import pylab
+import matplotlib
+import matplotlib.patches as mpatches
+from matplotlib.cm import get_cmap, ScalarMappable
+from matplotlib.colors import LinearSegmentedColormap
+from umap import UMAP
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
 from utils import *
@@ -34,8 +41,7 @@ class ToilDataset():
         self.path = path
         self.tissue = tissue
         self.binary_dict = binary_dict
-        self.tcga = (dataset == 'tcga') or (dataset == 'both')
-        self.gtex = (dataset == 'gtex') or (dataset == 'both')
+        self.dataset = dataset
         # FIXME: Problems if we change rand_frac seed for filtering info
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
                                               f'dataset={dataset}',
@@ -56,10 +62,10 @@ class ToilDataset():
 
         # Make mapper files if they are not already saved
         self.make_mappers()
-        # Read data from the Toil data set
+        # Read data from the Toil data set # TODO: Interchange categories and phenotypes and only leave categories (unify dataset class)
         self.matrix_data, self.categories, self.phenotypes = self.read_data()
         # Filter toil datasets to use GTEx, TCGA or both. This part also takes out TARGET data
-        self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
+        self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_datasets()
         # Get labels and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
         # Find stats of each dataset segment
@@ -67,6 +73,7 @@ class ToilDataset():
         # Filter genes based on mean, std and sample_frac. This also subsamples the resulting filtered gene list by self.rand_frac. 
         # If self.gene_list_csv path is specified it works like a wildcard and CanDLE will train only with the genes in the csv path
         self.filtered_gene_list, self.gene_filtered_data_matrix = self.filter_genes()
+        # TODO: Add a function that handles a possible subsampling of the data
         # Perform batch normalization, this uses self.find_general_stats() and normalizes self.gene_filtered_data_matrix  
         self.batch_normalize()
         # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue
@@ -79,10 +86,13 @@ class ToilDataset():
         # Define number of classes for classification
         self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
 
+        # TODO: Make function that prints a global summary of the complete dataset (n_samples, n_genes and so on)
+
         # Make important plots with dataset characteristics
-        self.plot_label_distribution()
+        self.plot_label_distribution() # TODO: Make a better plot with one bar per class divided in train/val/test
         self.plot_sample_frac()
         # self.plot_gene_expression_histograms(rand_size=100000)
+        # self.plot_dim_reduction()
 
     def make_mappers(self):
         """
@@ -122,11 +132,18 @@ class ToilDataset():
         # Delete the rows with nan values
         categories.dropna(inplace=True)
         phenotypes.dropna(inplace=True)
+        # Filter out all TARGET samples
+        matrix_data = matrix_data.iloc[:, ~matrix_data.columns.str.contains("TARGET")]
+        phenotypes = phenotypes[~phenotypes.index.str.contains("TARGET")]
+        # Add is_tcga column to categories and phenotypes
+        categories['is_tcga'] = categories['TCGA_GTEX_main_category'].str.contains('TCGA')
+        phenotypes['is_tcga'] = phenotypes['_study'] == 'TCGA'
         end = time.time()
         print("Time to load data: {} s".format(round(end - start, 3)))
         return matrix_data, categories, phenotypes
     
-    def filter_toil_datasets(self):
+    # TODO: Adapt this function to tha same form as wang and recount3. Obtain on unified function
+    def filter_datasets(self):
         """
         Filters the Toil data set by using or not using TCGA and GTEx samples.
 
@@ -145,36 +162,30 @@ class ToilDataset():
             categories_filtered(pd.dataframe): Dataframe of the filtered categories of the Toil data set.
             phenotypes_filtered(pd.dataframe): Dataframe of the filtered phenotypes of the Toil data set.
         """
-        # Filter out all TARGET samples from matrix_data
-        self.matrix_data = self.matrix_data.iloc[:, ~self.matrix_data.columns.str.contains("TARGET")]
-        matrix_data_filtered = self.matrix_data
-        # Filter out all TARGET samples from self.phenotypes
-        phenotypes_filtered = self.phenotypes[~self.phenotypes.index.str.contains("TARGET")]
 
         # Handle the filters for TCGA and GTEx
-        if self.tcga and ( not self.gtex):
+        if self.dataset == 'tcga':
             print("Using TCGA samples only")
             # Filter out all gtex samples from matrix_data
-            matrix_data_filtered = matrix_data_filtered.iloc[:, ~matrix_data_filtered.columns.str.contains("GTEX")]
+            matrix_data_filtered = self.matrix_data.iloc[:, ~self.matrix_data.columns.str.contains("GTEX")]
             categories_filtered = self.categories.loc[~self.categories.index.str.contains("GTEX"), :]
-            phenotypes_filtered = phenotypes_filtered.loc[~(phenotypes_filtered["_study"]=="GTEX"), :]
-        elif ( not self.tcga) and self.gtex:
+            phenotypes_filtered = self.phenotypes.loc[~(self.phenotypes["_study"]=="GTEX"), :]
+        elif self.dataset == 'gtex':
             print("Using GTEX samples only")
             # Filter out all tcga samples from matrix_data
-            matrix_data_filtered = matrix_data_filtered.iloc[:, ~matrix_data_filtered.columns.str.contains("TCGA")]
+            matrix_data_filtered = self.matrix_data.iloc[:, ~self.matrix_data.columns.str.contains("TCGA")]
             categories_filtered = self.categories.loc[~self.categories.index.str.contains("TCGA"), :]
-            phenotypes_filtered = phenotypes_filtered.loc[~(phenotypes_filtered["_study"]=="TCGA"), :]
-        elif self.tcga and self.gtex:
+            phenotypes_filtered = self.phenotypes.loc[~(self.phenotypes["_study"]=="TCGA"), :]
+        elif self.dataset == 'both':
             # Do nothing because both TCGA and GTEX samples are included
             print("Using TCGA and GTEX samples")
             matrix_data_filtered = self.matrix_data
             categories_filtered = self.categories
-            phenotypes_filtered = phenotypes_filtered
-        else:
-            raise ValueError("You are not selecting any dataset.")
+            phenotypes_filtered = self.phenotypes
             
         return matrix_data_filtered, categories_filtered, phenotypes_filtered
 
+    # TODO: Unify this function across datasets
     # This function extracts the labels from categories_filtered or phenotypes_filtered and returns a label dataframe and a dictionary of textual labels to numeric labels
     def find_labels(self):
         # Load mapper dict from normal TCGA samples to GTEX category
@@ -216,20 +227,16 @@ class ToilDataset():
             
             # Handle normal (Healthy) TCGA subjects
             # If there are both TCGA and GTEX assign GTEX textual label to the normal (Healthy) TCGA subjects
-            if self.tcga and self.gtex:
+            if self.dataset == 'both':
                 # Put GTEX textual label in lab_txt column for normal (Healthy) TCGA samples
                 label_df.loc[normal_tcga_samples, "lab_txt"] = label_df.loc[normal_tcga_samples, "_primary_site"].map(normal_tcga_2_gtex)
                 # pass
             # If there is only TCGA assign TCGA-NT label to the normal (Healthy) TCGA subjects
-            elif self.tcga and (not self.gtex):
+            elif self.dataset == 'tcga':
                 # Put TCGA textual label in lab_txt column for normal (Healthy) TCGA samples
                 label_df.loc[normal_tcga_samples, "lab_txt"] = "TCGA-NT"
-            # If there is GTEX and not TCGA there is no need to handle normal (Healthy) TCGA subjects
-            elif self.gtex and (not self.tcga):
-                pass
-            # If there is neither TCGA nor GTEX raise an error
             else:
-                raise ValueError("There is neither TCGA nor GTEX data available.")
+                pass
 
             # Map phenotype detailed category to textual label in label_df for the non normal (Healthy) TCGA samples
             label_df.loc[label_df["lab_txt"] == 0, "lab_txt"] = label_df.loc[label_df["lab_txt"] == 0, "detailed_category"].map(pheno_2_lab_txt)
@@ -510,8 +517,6 @@ class ToilDataset():
         # Both matrixes and labels are already shuffled
         return split_labels, split_matrices
 
-    # TODO: Add a function that handles a possible subsampling of the data
-
     # This function gets the dataloaders for the train, val and test sets
     def get_dataloaders(self, batch_size):
         # Select data partitions
@@ -553,15 +558,7 @@ class ToilDataset():
         test_label_dist.index = test_label_dist.index.map(lab_num_2_lab_txt)
         
         # Handle different fig sizes for gtex and tcga
-        if self.gtex and self.tcga:
-            fig_size = (15, 15)
-        elif self.gtex and not self.tcga:
-            fig_size = (15, 7)
-        elif not self.gtex and self.tcga:
-            fig_size = (15, 7)
-        else:
-            raise ValueError("Either GTEx or TCGA must be True")
-
+        fig_size = (15, 15) if self.dataset == 'both' else (15, 7)
 
         # Plot horizontal bar chart of label distribution
         plt.figure(figsize=fig_size)
@@ -660,17 +657,152 @@ class ToilDataset():
         plt.savefig(os.path.join(self.path, 'expressed_sample_fraction_hist.png'))
         plt.close()          
 
+    def plot_dim_reduction(self):
+        
+        valid_samples = self.gene_filtered_data_matrix.columns
+        valid_genes = self.filtered_gene_list
+        bool_sample_index = self.matrix_data.columns.isin(valid_samples)
+        bool_gene_index = self.matrix_data.index.isin(valid_genes)
+        print('Filtering raw data to valid genes and samples...')
+        raw_data = self.matrix_data.loc[bool_gene_index, bool_sample_index].T.sort_index()
+        processed_data = self.gene_filtered_data_matrix.T.sort_index()
+        # Get and sort metadata
+        meta_df = self.label_df
+        meta_df = meta_df.sort_index()
+
+        if (not os.path.exists(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'))) or self.force_compute:
+            
+            print(f'Computing dimensionality reduction and saving it to {os.path.join(self.dataset_info_path, "dimensionality_reduction.pkl")}...')
+            
+            print('Reducing dimensions with PCA...')
+            raw_pca = PCA(n_components=2, random_state=0)
+            processed_pca = PCA(n_components=2, random_state=0)
+            r_raw_pca = raw_pca.fit_transform(raw_data)
+            r_processed_pca = processed_pca.fit_transform(processed_data)
+
+            # If this shows a warning with OpenBlast you can solve it using this GitHub issue https://github.com/ultralytics/yolov5/issues/2863
+            # You just need to write in terminal "export OMP_NUM_THREADS=1"
+            print('Reducing dimensions with TSNE...')
+            raw_tsne = TSNE(n_components=2, random_state=0, learning_rate='auto', init='random', n_jobs=-1, verbose=2)       # learning_rate and init were set due to a future warning
+            processed_tsne = TSNE(n_components=2, random_state=0, learning_rate='auto', init='random', n_jobs=-1, verbose=2)
+            r_raw_tsne = raw_tsne.fit_transform(raw_data)
+            r_processed_tsne = processed_tsne.fit_transform(processed_data)
+
+            print('Reducing dimensions with UMAP...')
+            raw_umap = UMAP(n_components=2, random_state=0) # , n_neighbors=64, local_connectivity=32)          # n_neighbors and local_connectivity are set to ensure that the graph is connected
+            processed_umap = UMAP(n_components=2, random_state=0) # , n_neighbors=64, local_connectivity=32)
+            r_raw_umap = raw_umap.fit_transform(raw_data)
+            r_processed_umap = processed_umap.fit_transform(processed_data)
+
+            reduced_dict = {'raw_pca': r_raw_pca,               'raw_tsne': r_raw_tsne,                 'raw_umap': r_raw_umap,
+                            'processed_pca': r_processed_pca,   'processed_tsne': r_processed_tsne,     'processed_umap':  r_processed_umap}
+
+            with open(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'), 'wb') as f:
+                pkl.dump(reduced_dict, f)
+        
+        else:
+            
+            print(f'Loading dimensionality reduction from {os.path.join(self.dataset_info_path, "dimensionality_reduction.pkl")}...')
+            
+            with open(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'), 'rb') as f:
+                reduced_dict = pkl.load(f)
+        
+
+        def plot_dim_reduction(reduced_dict, meta_df, color_type='tcga', cmap=None):
+
+
+            # Load id_2_tissue mapper from file
+            with open(os.path.join(self.path, "mappers", "id_2_tissue_mapper.json"), "r") as f:
+                id_2_tissue_mapper = json.load(f)
+
+            meta_df['tissue'] = meta_df['lab_txt'].map(id_2_tissue_mapper)
+
+            # Get dictionaries to have different options to colorize the scatter points
+            tcga_dict = {True: 1, False: 0}
+            tissue_dict = {tissue: i/len(meta_df.tissue.unique()) for i, tissue in enumerate(sorted(meta_df.tissue.unique()))}
+            class_dict = {cl: i/len(meta_df.lab_txt.unique()) for i, cl in enumerate(sorted(meta_df.lab_txt.unique()))}
+
+            # Define color map
+            if cmap is None:
+                d_colors = ["black", "darkcyan"]
+                cmap = LinearSegmentedColormap.from_list("candle_cmap", d_colors)
+            else:
+                cmap = get_cmap(cmap)
+            
+            # Compute color values
+            if color_type == 'tcga':
+                meta_df['color'] = meta_df['is_tcga'].map(tcga_dict)
+            elif color_type == 'tissue':
+                meta_df['color'] = meta_df['tissue'].map(tissue_dict)
+            elif color_type == 'class':
+                meta_df['color'] = meta_df['lab_txt'].map(class_dict)
+
+            # Plot figure
+            fig, ax = plt.subplots(2, 3)
+
+            ax[0, 0].scatter(reduced_dict['raw_pca'][:,0],          reduced_dict['raw_pca'][:,1],           c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[1, 0].scatter(reduced_dict['processed_pca'][:,0],    reduced_dict['processed_pca'][:,1],     c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[0, 1].scatter(reduced_dict['raw_tsne'][:,0],         reduced_dict['raw_tsne'][:,1],          c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[1, 1].scatter(reduced_dict['processed_tsne'][:,0],   reduced_dict['processed_tsne'][:,1],    c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[0, 2].scatter(reduced_dict['raw_umap'][:,0],         reduced_dict['raw_umap'][:,1],          c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[1, 2].scatter(reduced_dict['processed_umap'][:,0],   reduced_dict['processed_umap'][:,1],    c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+
+            label_dict = {0: 'PC', 1: 'T-SNE', 2: 'UMAP'}
+            title_dict = {0: 'PCA', 1: 'T-SNE', 2: 'UMAP'}
+
+            for i in range(ax.shape[0]):
+                for j in range(ax.shape[1]):
+                    ax[i,j].spines.right.set_visible(False) 
+                    ax[i,j].spines.top.set_visible(False)
+                    ax[i,j].set_xlabel(f'{label_dict[j]}1')
+                    ax[i,j].set_ylabel(f'{label_dict[j]}2')
+                    ax[i,j].set_title(f'{title_dict[j]} of Raw Data' if i==0 else f'{title_dict[j]} of Processed Data')
+
+            # Set the legend
+            if (color_type == 'tcga'):
+                handles = [mpatches.Patch(facecolor=cmap(0.0), edgecolor='black', label='GTEx'),
+                           mpatches.Patch(facecolor=cmap(1.0), edgecolor='black', label='TCGA')]
+                fig.set_size_inches(13, 7)
+                ax[0, 2].legend(handles=handles, loc='center left',bbox_to_anchor=(1.15, 0.49))
+                plt.tight_layout()
+
+            elif (color_type == 'tissue'):
+                handles = [mpatches.Patch(facecolor=cmap(val), edgecolor='black', label=f'{key} Tissue') for key, val in tissue_dict.items()]
+                fig.set_size_inches(15, 7)
+                fig.legend(handles=handles, loc=7)
+                fig.tight_layout()
+                fig.subplots_adjust(right=0.83)
+                
+
+            elif (color_type == 'class'):
+                handles = [mpatches.Patch(facecolor=cmap(val), edgecolor='black', label=f'{key}') for key, val in class_dict.items()]
+                fig.set_size_inches(18, 8)
+                fig.legend(handles=handles, loc=7, ncol=2)
+                fig.tight_layout()
+                fig.subplots_adjust(right=0.75)
+
+            
+            else:
+                raise ValueError('Invalid color type...')
+
+            # Save
+            fig.savefig(os.path.join(self.dataset_info_path, f'dim_reduction_{color_type}.png'), dpi=300)
+            plt.close()
+
+        # Plot dimensionality reduction with the three different color styles
+        plot_dim_reduction(reduced_dict, meta_df, color_type='tcga')
+        plot_dim_reduction(reduced_dict, meta_df, color_type='tissue', cmap='brg')
+        plot_dim_reduction(reduced_dict, meta_df, color_type='class', cmap='brg')
 
 class WangDataset():
-    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-1.0,
+    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-10.0,
                 std_thr=0.01, rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None',
                 batch_normalization='None', partition_seed=0, force_compute = False):
 
         self.path = path
         self.tissue = tissue
         self.binary_dict = binary_dict
-        self.tcga = (dataset == 'tcga') or (dataset == 'both')
-        self.gtex = (dataset == 'gtex') or (dataset == 'both')
+        self.dataset = dataset
         # FIXME: Problems if we change rand_frac seed for filtering info
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
                                               f'dataset={dataset}',
@@ -693,10 +825,8 @@ class WangDataset():
         self.unzip_data()
         # Read data from the Wang data set and performs a log2(x+1) transformation
         self.matrix_data, self.categories = self.read_data()
-        # TODO: Add filter_wang_datasets() function
-        # FIXME: In this moment it is not possible to filter gtex or tcga data. It just works for both although dataset is specified as gtex or tcga
-        # # Filter Wang datasets to use GTEx, TCGA or both. This part also takes out TARGET data
-        # self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
+        # Filter Wang datasets to use GTEx, TCGA or both.
+        self.matrix_data_filtered, self.categories_filtered = self.filter_datasets()
         # Get labels dataframe and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
         # Find stats of each dataset segment
@@ -712,9 +842,11 @@ class WangDataset():
         self.make_binary_problem() # If self.binary_dict == {} this function does nothing
         # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
         self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
-
         # Define number of classes for classification
         self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
+
+        # Plot relevant plots here # TODO: Incorporate all the plots from Toil here
+        # self.plot_dim_reduction()
 
 
     def make_mappers(self):
@@ -858,14 +990,43 @@ class WangDataset():
 
         return data_matrix, category_df
 
+    # Filters the Wang data set by using or not using TCGA and GTEx samples.
+    def filter_datasets(self):
+
+        tcga_samples = self.categories.index[self.categories['is_tcga']]
+        gtex_samples = self.categories.index[~self.categories['is_tcga']]
+
+        # Handle the filters for TCGA and GTEx
+        if self.dataset == 'tcga':
+            print("Using TCGA samples only")
+            # Filter out all gtex samples from matrix_data
+            matrix_data_filtered = self.matrix_data.loc[:, tcga_samples]
+            categories_filtered = self.categories.loc[tcga_samples, :]
+        elif self.dataset == 'gtex':
+            print("Using GTEx samples only")
+            # Filter out all tcga samples from matrix_data
+            matrix_data_filtered = self.matrix_data.loc[:, gtex_samples]
+            categories_filtered = self.categories.loc[gtex_samples, :]
+        elif self.dataset == 'both':
+            # Do nothing because both TCGA and GTEX samples are included
+            print("Using TCGA and GTEX samples")
+            matrix_data_filtered = self.matrix_data
+            categories_filtered = self.categories
+            
+        return matrix_data_filtered, categories_filtered
+
     # This function extracts the labels from categories and returns a label dataframe and a dictionary of textual labels to numeric labels
     def find_labels(self):
 
         # Make dataset directory if it does not exist
         os.makedirs(self.dataset_info_path, exist_ok = True)
 
-        # TODO: Change this for a filtered categories dataframe filtering by dataset
-        label_df = self.categories
+        # Initialize label_df as filtered categories 
+        label_df = self.categories_filtered
+
+        # Handle the only TCGA case where all normal samples have to be grouped in a single NT class
+        if self.dataset == 'tcga':
+            label_df.loc[label_df['lab_txt'].str.contains('GTEX'), 'lab_txt'] = 'TCGA-NT'
 
         # Get unique textual labels obtained and sort them
         current_labels = sorted(label_df["lab_txt"].unique().tolist())
@@ -998,7 +1159,7 @@ class WangDataset():
             self.plot_filtering_histograms(filtering_info_df)
         
         # Filter tha data matrix based on the gene list
-        gene_filtered_data_matrix = self.matrix_data.loc[gene_list, :]
+        gene_filtered_data_matrix = self.matrix_data_filtered.loc[gene_list, :]
 
         print("Currently working with {} genes...".format(gene_filtered_data_matrix.shape[0]))
 
@@ -1144,19 +1305,152 @@ class WangDataset():
         fig.savefig(os.path.join(self.dataset_info_path, "filtering_histograms.png"), dpi = 300)
         plt.close(fig)
 
+    def plot_dim_reduction(self):
+        
+        valid_samples = self.gene_filtered_data_matrix.columns
+        valid_genes = self.filtered_gene_list
+        bool_sample_index = self.matrix_data.columns.isin(valid_samples)
+        bool_gene_index = self.matrix_data.index.isin(valid_genes)
+        print('Filtering raw data to valid genes and samples...')
+        raw_data = self.matrix_data.loc[bool_gene_index, bool_sample_index].T.sort_index()
+        processed_data = self.gene_filtered_data_matrix.T.sort_index()
+        # Get and sort metadata
+        meta_df = self.label_df
+        meta_df = meta_df.sort_index()
+
+        if (not os.path.exists(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'))) or self.force_compute:
+            
+            print(f'Computing dimensionality reduction and saving it to {os.path.join(self.dataset_info_path, "dimensionality_reduction.pkl")}...')
+            
+            print('Reducing dimensions with PCA...')
+            raw_pca = PCA(n_components=2, random_state=0)
+            processed_pca = PCA(n_components=2, random_state=0)
+            r_raw_pca = raw_pca.fit_transform(raw_data)
+            r_processed_pca = processed_pca.fit_transform(processed_data)
+
+            # If this shows a warning with OpenBlast you can solve it using this GitHub issue https://github.com/ultralytics/yolov5/issues/2863
+            # You just need to write in terminal "export OMP_NUM_THREADS=1"
+            print('Reducing dimensions with TSNE...')
+            raw_tsne = TSNE(n_components=2, random_state=0, learning_rate='auto', init='random', n_jobs=-1, verbose=2)       # learning_rate and init were set due to a future warning
+            processed_tsne = TSNE(n_components=2, random_state=0, learning_rate='auto', init='random', n_jobs=-1, verbose=2)
+            r_raw_tsne = raw_tsne.fit_transform(raw_data)
+            r_processed_tsne = processed_tsne.fit_transform(processed_data)
+
+            print('Reducing dimensions with UMAP...')
+            raw_umap = UMAP(n_components=2, random_state=0) # , n_neighbors=64, local_connectivity=32)          # n_neighbors and local_connectivity are set to ensure that the graph is connected
+            processed_umap = UMAP(n_components=2, random_state=0) # , n_neighbors=64, local_connectivity=32)
+            r_raw_umap = raw_umap.fit_transform(raw_data)
+            r_processed_umap = processed_umap.fit_transform(processed_data)
+
+            reduced_dict = {'raw_pca': r_raw_pca,               'raw_tsne': r_raw_tsne,                 'raw_umap': r_raw_umap,
+                            'processed_pca': r_processed_pca,   'processed_tsne': r_processed_tsne,     'processed_umap':  r_processed_umap}
+
+            with open(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'), 'wb') as f:
+                pkl.dump(reduced_dict, f)
+        
+        else:
+            
+            print(f'Loading dimensionality reduction from {os.path.join(self.dataset_info_path, "dimensionality_reduction.pkl")}...')
+            
+            with open(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'), 'rb') as f:
+                reduced_dict = pkl.load(f)
+        
+
+        def plot_dim_reduction(reduced_dict, meta_df, color_type='tcga', cmap=None):
 
 
+            # Load id_2_tissue mapper from file
+            with open(os.path.join(self.path, "mappers", "id_2_tissue_mapper.json"), "r") as f:
+                id_2_tissue_mapper = json.load(f)
+
+            meta_df['tissue'] = meta_df['lab_txt'].map(id_2_tissue_mapper)
+
+            # Get dictionaries to have different options to colorize the scatter points
+            tcga_dict = {True: 1, False: 0}
+            tissue_dict = {tissue: i/len(meta_df.tissue.unique()) for i, tissue in enumerate(sorted(meta_df.tissue.unique()))}
+            class_dict = {cl: i/len(meta_df.lab_txt.unique()) for i, cl in enumerate(sorted(meta_df.lab_txt.unique()))}
+
+            # Define color map
+            if cmap is None:
+                d_colors = ["black", "darkcyan"]
+                cmap = LinearSegmentedColormap.from_list("candle_cmap", d_colors)
+            else:
+                cmap = get_cmap(cmap)
+            
+            # Compute color values
+            if color_type == 'tcga':
+                meta_df['color'] = meta_df['is_tcga'].map(tcga_dict)
+            elif color_type == 'tissue':
+                meta_df['color'] = meta_df['tissue'].map(tissue_dict)
+            elif color_type == 'class':
+                meta_df['color'] = meta_df['lab_txt'].map(class_dict)
+
+            # Plot figure
+            fig, ax = plt.subplots(2, 3)
+
+            ax[0, 0].scatter(reduced_dict['raw_pca'][:,0],          reduced_dict['raw_pca'][:,1],           c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.1)
+            ax[1, 0].scatter(reduced_dict['processed_pca'][:,0],    reduced_dict['processed_pca'][:,1],     c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.1)
+            ax[0, 1].scatter(reduced_dict['raw_tsne'][:,0],         reduced_dict['raw_tsne'][:,1],          c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.1)
+            ax[1, 1].scatter(reduced_dict['processed_tsne'][:,0],   reduced_dict['processed_tsne'][:,1],    c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.1)
+            ax[0, 2].scatter(reduced_dict['raw_umap'][:,0],         reduced_dict['raw_umap'][:,1],          c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.1)
+            ax[1, 2].scatter(reduced_dict['processed_umap'][:,0],   reduced_dict['processed_umap'][:,1],    c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.1)
+
+            label_dict = {0: 'PC', 1: 'T-SNE', 2: 'UMAP'}
+            title_dict = {0: 'PCA', 1: 'T-SNE', 2: 'UMAP'}
+
+            for i in range(ax.shape[0]):
+                for j in range(ax.shape[1]):
+                    ax[i,j].spines.right.set_visible(False) 
+                    ax[i,j].spines.top.set_visible(False)
+                    ax[i,j].set_xlabel(f'{label_dict[j]}1')
+                    ax[i,j].set_ylabel(f'{label_dict[j]}2')
+                    ax[i,j].set_title(f'{title_dict[j]} of Raw Data' if i==0 else f'{title_dict[j]} of Processed Data')
+
+            # Set the legend
+            if (color_type == 'tcga'):
+                handles = [mpatches.Patch(facecolor=cmap(0.0), edgecolor='black', label='GTEx'),
+                           mpatches.Patch(facecolor=cmap(1.0), edgecolor='black', label='TCGA')]
+                fig.set_size_inches(13, 7)
+                ax[0, 2].legend(handles=handles, loc='center left',bbox_to_anchor=(1.15, 0.49))
+                plt.tight_layout()
+
+            elif (color_type == 'tissue'):
+                handles = [mpatches.Patch(facecolor=cmap(val), edgecolor='black', label=f'{key} Tissue') for key, val in tissue_dict.items()]
+                fig.set_size_inches(15, 7)
+                fig.legend(handles=handles, loc=7)
+                fig.tight_layout()
+                fig.subplots_adjust(right=0.83)
+                
+
+            elif (color_type == 'class'):
+                handles = [mpatches.Patch(facecolor=cmap(val), edgecolor='black', label=f'{key}') for key, val in class_dict.items()]
+                fig.set_size_inches(18, 8)
+                fig.legend(handles=handles, loc=7, ncol=2)
+                fig.tight_layout()
+                fig.subplots_adjust(right=0.75)
+
+            
+            else:
+                raise ValueError('Invalid color type...')
+
+            # Save
+            fig.savefig(os.path.join(self.dataset_info_path, f'dim_reduction_{color_type}.png'), dpi=300)
+            plt.close()
+
+        # Plot dimensionality reduction with the three different color styles
+        plot_dim_reduction(reduced_dict, meta_df, color_type='tcga')
+        plot_dim_reduction(reduced_dict, meta_df, color_type='tissue', cmap='brg')
+        plot_dim_reduction(reduced_dict, meta_df, color_type='class', cmap='brg')
 
 class Recount3Dataset():
-    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-1.0,
+    def __init__(self, path, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-10.0,
                 std_thr=0.01, rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None',
                 batch_normalization='None', partition_seed=0, force_compute = False):
 
         self.path = path
         self.tissue = tissue
         self.binary_dict = binary_dict
-        self.tcga = (dataset == 'tcga') or (dataset == 'both')
-        self.gtex = (dataset == 'gtex') or (dataset == 'both')
+        self.dataset = dataset
         self.dataset_info_path = os.path.join(self.path, 'processed_data',
                                               f'dataset={dataset}',
                                               f'mean_thr={mean_thr}_std_thr={std_thr}',
@@ -1176,10 +1470,8 @@ class Recount3Dataset():
         self.make_mappers()
         # Read data from the Recount3 dataset and perform a log2(x+1) transformation. Also return gene metadata that is only available for Recount3
         self.matrix_data, self.categories, self.gene_meta = self.read_data()
-        # TODO: Add filter_recount3_datasets() function
-        # FIXME: In this moment it is not possible to filter gtex or tcga data. It just works for both although dataset is specified as gtex or tcga
-        # # Filter Recount3 datasets to use GTEx, TCGA or both. This part also takes out TARGET data
-        # self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_toil_datasets()
+        # Filter Wang datasets to use GTEx, TCGA or both.
+        self.matrix_data_filtered, self.categories_filtered = self.filter_datasets()
         # Get labels dataframe and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
         # Find stats of each dataset segment
@@ -1198,6 +1490,9 @@ class Recount3Dataset():
 
         # Define number of classes for classification
         self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
+
+        # Plot relevant plots here # TODO: Incorporate all the plots from Toil here
+        # self.plot_dim_reduction()
 
     def make_mappers(self):
         """
@@ -1311,14 +1606,43 @@ class Recount3Dataset():
         print("Time to load data: {} s".format(round(end - start, 3)))
         return matrix_data, global_meta, gene_meta
 
+    # Filters the Recount3 data set by using or not using TCGA and GTEx samples.
+    def filter_datasets(self):
+
+        tcga_samples = self.categories.index[self.categories['is_tcga']]
+        gtex_samples = self.categories.index[~self.categories['is_tcga']]
+
+        # Handle the filters for TCGA and GTEx
+        if self.dataset == 'tcga':
+            print("Using TCGA samples only")
+            # Filter out all gtex samples from matrix_data
+            matrix_data_filtered = self.matrix_data.loc[:, tcga_samples]
+            categories_filtered = self.categories.loc[tcga_samples, :]
+        elif self.dataset == 'gtex':
+            print("Using GTEx samples only")
+            # Filter out all tcga samples from matrix_data
+            matrix_data_filtered = self.matrix_data.loc[:, gtex_samples]
+            categories_filtered = self.categories.loc[gtex_samples, :]
+        elif self.dataset == 'both':
+            # Do nothing because both TCGA and GTEX samples are included
+            print("Using TCGA and GTEX samples")
+            matrix_data_filtered = self.matrix_data
+            categories_filtered = self.categories
+            
+        return matrix_data_filtered, categories_filtered
+
     # This function extracts the labels from categories and returns a label dataframe and a dictionary of textual labels to numeric labels
     def find_labels(self):
 
         # Make dataset directory if it does not exist
         os.makedirs(self.dataset_info_path, exist_ok = True)
 
-        # TODO: Change this for a filtered categories dataframe filtering by dataset
-        label_df = self.categories
+        # Initialize label df with filtered categories
+        label_df = self.categories_filtered
+
+        # Handle the only TCGA case where all normal samples have to be grouped in a single NT class
+        if self.dataset == 'tcga':
+            label_df.loc[label_df['lab_txt'].str.contains('GTEX'), 'lab_txt'] = 'TCGA-NT'
 
         # Get unique textual labels obtained and sort them
         current_labels = sorted(label_df["lab_txt"].unique().tolist())
@@ -1333,6 +1657,7 @@ class Recount3Dataset():
             json.dump(lab_txt_2_lab_num, f, indent = 4)
 
         return label_df, lab_txt_2_lab_num
+
 
     # TODO: Make that general stats is not hosted in self.path but in self.path/processed_data
     # This function finds the mean expression, std and expressed sample fraction for GTEx, TCGA, healthy TCGA and the joint dataset
@@ -1451,12 +1776,12 @@ class Recount3Dataset():
             self.plot_filtering_histograms(filtering_info_df)
         
         # Filter tha data matrix based on the gene list
-        gene_filtered_data_matrix = self.matrix_data.loc[gene_list, :]
+        gene_filtered_data_matrix = self.matrix_data_filtered.loc[gene_list, :]
 
         print("Currently working with {} genes...".format(gene_filtered_data_matrix.shape[0]))
 
         return gene_list.to_list(), gene_filtered_data_matrix
-
+    
     # This function performs a data normalization by batches (GTEX or TCGA) 
     def batch_normalize(self):
         if self.batch_normalization=='None':
@@ -1490,7 +1815,7 @@ class Recount3Dataset():
             normalized_joint = pd.concat([normalized_gtex, normalized_tcga], axis=1)
 
             # Sort columns of normalized joint
-            # normalized_joint = normalized_joint.T.sort_index().T # Did not sort to conserve previous ordering
+            normalized_joint = normalized_joint.T.sort_index().T
 
             # Replace NaNs generated by std division to 0's
             self.gene_filtered_data_matrix = normalized_joint.fillna(0.0)
@@ -1597,7 +1922,143 @@ class Recount3Dataset():
         fig.savefig(os.path.join(self.dataset_info_path, "filtering_histograms.png"), dpi = 300)
         plt.close(fig)
 
+    def plot_dim_reduction(self):
+        
+        valid_samples = self.gene_filtered_data_matrix.columns
+        valid_genes = self.filtered_gene_list
+        bool_sample_index = self.matrix_data.columns.isin(valid_samples)
+        bool_gene_index = self.matrix_data.index.isin(valid_genes)
+        print('Filtering raw data to valid genes and samples...')
+        raw_data = self.matrix_data.loc[bool_gene_index, bool_sample_index].T.sort_index()
+        processed_data = self.gene_filtered_data_matrix.T.sort_index()
+        # Get and sort metadata
+        meta_df = self.label_df
+        meta_df = meta_df.sort_index()
 
+        if (not os.path.exists(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'))) or self.force_compute:
+            
+            print(f'Computing dimensionality reduction and saving it to {os.path.join(self.dataset_info_path, "dimensionality_reduction.pkl")}...')
+            
+            print('Reducing dimensions with PCA...')
+            raw_pca = PCA(n_components=2, random_state=0)
+            processed_pca = PCA(n_components=2, random_state=0)
+            r_raw_pca = raw_pca.fit_transform(raw_data)
+            r_processed_pca = processed_pca.fit_transform(processed_data)
+
+            # If this shows a warning with OpenBlast you can solve it using this GitHub issue https://github.com/ultralytics/yolov5/issues/2863
+            # You just need to write in terminal "export OMP_NUM_THREADS=1"
+            print('Reducing dimensions with TSNE...')
+            raw_tsne = TSNE(n_components=2, random_state=0, learning_rate='auto', init='random', n_jobs=-1, verbose=2)       # learning_rate and init were set due to a future warning
+            processed_tsne = TSNE(n_components=2, random_state=0, learning_rate='auto', init='random', n_jobs=-1, verbose=2)
+            r_raw_tsne = raw_tsne.fit_transform(raw_data)
+            r_processed_tsne = processed_tsne.fit_transform(processed_data)
+
+            print('Reducing dimensions with UMAP...')
+            raw_umap = UMAP(n_components=2, random_state=0) # , n_neighbors=64, local_connectivity=32)          # n_neighbors and local_connectivity are set to ensure that the graph is connected
+            processed_umap = UMAP(n_components=2, random_state=0) # , n_neighbors=64, local_connectivity=32)
+            r_raw_umap = raw_umap.fit_transform(raw_data)
+            r_processed_umap = processed_umap.fit_transform(processed_data)
+
+            reduced_dict = {'raw_pca': r_raw_pca,               'raw_tsne': r_raw_tsne,                 'raw_umap': r_raw_umap,
+                            'processed_pca': r_processed_pca,   'processed_tsne': r_processed_tsne,     'processed_umap':  r_processed_umap}
+
+            with open(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'), 'wb') as f:
+                pkl.dump(reduced_dict, f)
+        
+        else:
+            
+            print(f'Loading dimensionality reduction from {os.path.join(self.dataset_info_path, "dimensionality_reduction.pkl")}...')
+            
+            with open(os.path.join(self.dataset_info_path, 'dimensionality_reduction.pkl'), 'rb') as f:
+                reduced_dict = pkl.load(f)
+        
+
+        def plot_dim_reduction(reduced_dict, meta_df, color_type='tcga', cmap=None):
+
+
+            # Load id_2_tissue mapper from file
+            with open(os.path.join(self.path, "mappers", "id_2_tissue_mapper.json"), "r") as f:
+                id_2_tissue_mapper = json.load(f)
+
+            meta_df['tissue'] = meta_df['lab_txt'].map(id_2_tissue_mapper)
+
+            # Get dictionaries to have different options to colorize the scatter points
+            tcga_dict = {True: 1, False: 0}
+            tissue_dict = {tissue: i/len(meta_df.tissue.unique()) for i, tissue in enumerate(sorted(meta_df.tissue.unique()))}
+            class_dict = {cl: i/len(meta_df.lab_txt.unique()) for i, cl in enumerate(sorted(meta_df.lab_txt.unique()))}
+
+            # Define color map
+            if cmap is None:
+                d_colors = ["black", "darkcyan"]
+                cmap = LinearSegmentedColormap.from_list("candle_cmap", d_colors)
+            else:
+                cmap = get_cmap(cmap)
+            
+            # Compute color values
+            if color_type == 'tcga':
+                meta_df['color'] = meta_df['is_tcga'].map(tcga_dict)
+            elif color_type == 'tissue':
+                meta_df['color'] = meta_df['tissue'].map(tissue_dict)
+            elif color_type == 'class':
+                meta_df['color'] = meta_df['lab_txt'].map(class_dict)
+
+            # Plot figure
+            fig, ax = plt.subplots(2, 3)
+
+            ax[0, 0].scatter(reduced_dict['raw_pca'][:,0],          reduced_dict['raw_pca'][:,1],           c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[1, 0].scatter(reduced_dict['processed_pca'][:,0],    reduced_dict['processed_pca'][:,1],     c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[0, 1].scatter(reduced_dict['raw_tsne'][:,0],         reduced_dict['raw_tsne'][:,1],          c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[1, 1].scatter(reduced_dict['processed_tsne'][:,0],   reduced_dict['processed_tsne'][:,1],    c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[0, 2].scatter(reduced_dict['raw_umap'][:,0],         reduced_dict['raw_umap'][:,1],          c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+            ax[1, 2].scatter(reduced_dict['processed_umap'][:,0],   reduced_dict['processed_umap'][:,1],    c = meta_df['color'], s=1, cmap=cmap, vmin=0, vmax=1, alpha=0.05)
+
+            label_dict = {0: 'PC', 1: 'T-SNE', 2: 'UMAP'}
+            title_dict = {0: 'PCA', 1: 'T-SNE', 2: 'UMAP'}
+
+            for i in range(ax.shape[0]):
+                for j in range(ax.shape[1]):
+                    ax[i,j].spines.right.set_visible(False) 
+                    ax[i,j].spines.top.set_visible(False)
+                    ax[i,j].set_xlabel(f'{label_dict[j]}1')
+                    ax[i,j].set_ylabel(f'{label_dict[j]}2')
+                    ax[i,j].set_title(f'{title_dict[j]} of Raw Data' if i==0 else f'{title_dict[j]} of Processed Data')
+
+            # Set the legend
+            if (color_type == 'tcga'):
+                handles = [mpatches.Patch(facecolor=cmap(0.0), edgecolor='black', label='GTEx'),
+                           mpatches.Patch(facecolor=cmap(1.0), edgecolor='black', label='TCGA')]
+                fig.set_size_inches(13, 7)
+                ax[0, 2].legend(handles=handles, loc='center left',bbox_to_anchor=(1.15, 0.49))
+                plt.tight_layout()
+
+            elif (color_type == 'tissue'):
+                handles = [mpatches.Patch(facecolor=cmap(val), edgecolor='black', label=f'{key} Tissue') for key, val in tissue_dict.items()]
+                fig.set_size_inches(15, 7)
+                fig.legend(handles=handles, loc=7)
+                fig.tight_layout()
+                fig.subplots_adjust(right=0.83)
+                
+
+            elif (color_type == 'class'):
+                handles = [mpatches.Patch(facecolor=cmap(val), edgecolor='black', label=f'{key}') for key, val in class_dict.items()]
+                fig.set_size_inches(18, 8)
+                fig.legend(handles=handles, loc=7, ncol=2)
+                fig.tight_layout()
+                fig.subplots_adjust(right=0.75)
+
+            
+            else:
+                raise ValueError('Invalid color type...')
+
+            # Save
+            fig.savefig(os.path.join(self.dataset_info_path, f'dim_reduction_{color_type}.png'), dpi=300)
+            plt.close()
+
+        # Plot dimensionality reduction with the three different color styles
+        plot_dim_reduction(reduced_dict, meta_df, color_type='tcga')
+        plot_dim_reduction(reduced_dict, meta_df, color_type='tissue', cmap='brg')
+        plot_dim_reduction(reduced_dict, meta_df, color_type='class', cmap='brg')
+        
 
 
 # Test code for dataset declaration
@@ -1616,11 +2077,10 @@ class Recount3Dataset():
 # breakpoint()
     
 # test_toil = ToilDataset(os.path.join("data", "toil_data"), batch_normalization='normal', force_compute=False)
-# test_wang = WangDataset(os.path.join('data', 'wang_data'), batch_normalization='normal', force_compute=False)
+# test_wang = WangDataset(os.path.join('data', 'wang_data'), batch_normalization='normal', dataset='both', force_compute=False)
 # test_recount3 = Recount3Dataset(os.path.join('data', 'recount3_data'), batch_normalization='normal', force_compute=False)
 # print(test_wang.categories)
 # print(test_wang.general_stats)
 # print(test_wang.gene_filtered_data_matrix)
 # train_loader, val_loader, test_loader = test_wang.get_dataloaders(batch_size = 100)
-# breakpoint()
 # breakpoint()

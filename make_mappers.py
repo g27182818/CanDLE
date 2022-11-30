@@ -331,7 +331,7 @@ recount3_gtex_mapper = {'Adipose - Subcutaneous':                       'GTEX-AD
                         'Heart - Atrial Appendage':                     'GTEX-HEA',
                         'Heart - Left Ventricle':                       'GTEX-HEA',
                         'Kidney - Cortex':                              'GTEX-KID',
-                        'Kidney - Medulla':                             'GTEX_KID',
+                        'Kidney - Medulla':                             'GTEX-KID',
                         'Liver':                                        'GTEX-LIV',
                         'Lung':                                         'GTEX-LUN',
                         'Minor Salivary Gland':                         'GTEX-SAL_GLA',
@@ -402,9 +402,16 @@ with open(os.path.join("data", "toil_data", "mappers", "id_2_tissue_mapper.json"
 # Save wang_standard mapper to file
 with open(os.path.join("data", "wang_data", "mappers", "wang_standard_label_mapper.json"), 'w') as f:
     json.dump(wang_standard_label_mapper, f, indent=4)
+# Save id_2_tissue_mapper to file
+with open(os.path.join("data", "wang_data", "mappers", "id_2_tissue_mapper.json"), 'w') as f:
+    json.dump(id_2_tissue_mapper, f, indent=4)
 
 # Save recount3_standard mapper to file
 with open(os.path.join("data", "recount3_data", "mappers", "recount3_gtex_mapper.json"), 'w') as f:
     json.dump(recount3_gtex_mapper, f, indent=4)
+# Save healthy_tcga 2 gtex mapper to file 
 with open(os.path.join("data", "recount3_data", "mappers", "healthy_tcga_2_gtex_mapper.json"), 'w') as f:
     json.dump(recount3_normal_tcga_mapper, f, indent=4)
+# Save id_2_tissue_mapper to file
+with open(os.path.join("data", "recount3_data", "mappers", "id_2_tissue_mapper.json"), 'w') as f:
+    json.dump(id_2_tissue_mapper, f, indent=4)
