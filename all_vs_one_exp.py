@@ -13,52 +13,66 @@ from datasets import *
 from model import *
 from utils import *
 
-######################################################################
-#            You can safely change these parameters                  #
-######################################################################
-mode = 'test' # 'compute', 'plot' or 'test'
-dataset = 'tcga' # 'tcga', 'gtex' or 'both'
-use_weights = 'True' # 'True' or 'False'
-sample_frac = 0.5 # Float in [0, 1)
+################ Parser code ###########################
+# Import the library
+import argparse
+# Create the parser
+parser = argparse.ArgumentParser()
+# Add an argument
+parser.add_argument('--source',         type=str,       default="toil",     help="Data source to use",              choices=["toil", "wang","recount3"])
+parser.add_argument('--dataset',        type=str,       default="tcga",     help="Dataset to use",                  choices=["tcga", "gtex", "both"])
+parser.add_argument('--weights',        type=str,       default="True",     help="Whether to use weights in model", choices=["True", "False"])
+parser.add_argument('--sample_frac',    type=float,     default=0.5,        help="Expression fraction threshold")
+parser.add_argument('--mode',           type=str,       default="compute",  help="Mode to run the code.",           choices=["compute", "plot", "test"])
+parser.add_argument('--gpu',            type=str,       default="0",          help="GPU on which to run experiments")
+# Parse the argument
+args = parser.parse_args()
+#############################################################
 
-gpu = '0' # What GPU to use
-######################################################################
-
-os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+# Set GPU in operating system
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
 # Define experiment name
-exp_folder_name = f'CanDLE_all_vs_one_weights_{use_weights}_sample_frac_{sample_frac}'
+exp_folder_name = f'CanDLE_all_vs_one_{args.source}_weights_{args.weights}_sample_frac_{args.sample_frac}'
 
-# Get mapper file to know labels
-mapper_path = os.path.join('data','toil_data', 'mappers', 'category_mapper.json')
+# Get mapper file to know labels depending on the source
+if (args.source == 'toil') or (args.source == 'recount3') :
+    mapper_path = os.path.join('data','toil_data', 'mappers', 'category_mapper.json')
+elif args.source == 'wang':
+    mapper_path = os.path.join('data','wang_data', 'mappers', 'wang_standard_label_mapper.json')
+else:
+    pass
+
 with open(mapper_path, "r") as f:
     category_mapper = json.load(f)
 
 labels = list(category_mapper.values())
 
-if dataset == 'both':
+if args.dataset == 'both':
     pass
-elif dataset == 'tcga':
+elif args.dataset == 'tcga':
     # Delete all label that start with 'GTEX'
     labels = [label for label in labels if not label.startswith('GTEX')]
-elif dataset == 'gtex':
+elif args.dataset == 'gtex':
     # Delete all label that start with 'TCGA'
     labels = [label for label in labels if not label.startswith('TCGA')]
 else:
     raise ValueError('dataset must be either "tcga", "gtex" or "both"')
 
+# # To test code. comment in real use
+# labels = labels[:2]
 
 # Declare folder names for all experiments
-exp_names = [os.path.join(exp_folder_name, dataset, label) for label in labels]
+exp_names = [os.path.join(exp_folder_name, args.dataset, label) for label in labels]
 
 
 # If mode is 'compute', compute all experiments
-if mode == 'compute':
+if args.mode == 'compute':
     for i in range(len(labels)):
         # Just compute the models if they are not already computed
         if not os.path.exists(os.path.join('Results', exp_names[i])):
             # run main.py with subprocess
-            command = f'python main.py --all_vs_one {labels[i]} --exp_name {exp_names[i]} --batch_norm normal --sample_frac {sample_frac} --weights {use_weights}'
+            command = f'python main.py --source {args.source} --all_vs_one {labels[i]} --exp_name {exp_names[i]} --batch_norm normal --sample_frac {args.sample_frac} --weights {args.weights} --mode train'
             print(command)
             command = command.split()
             subprocess.call(command)
@@ -98,8 +112,8 @@ cmap1 = LinearSegmentedColormap.from_list("mycmap", d_colors)
 color_matrix = cmap1(color_vec)
 
 # Plot results
-if mode == 'plot' or mode == 'compute':
-
+if args.mode == 'plot' or args.mode == 'compute':
+    # TODO: This plot code can be way prettier
     plt.figure(figsize=(22,10))
     plt.subplot(121)
     plt.plot(n_list, AP_list, 'ok')
@@ -121,7 +135,7 @@ if mode == 'plot' or mode == 'compute':
     plt.grid()
     plt.tight_layout()
     plt.show()
-    plt.savefig(os.path.join('Results',exp_folder_name, dataset,'f1_ap_vs_samples.png'), dpi=200)
+    plt.savefig(os.path.join('Results',exp_folder_name, args.dataset,'f1_ap_vs_samples.png'), dpi=200)
     plt.close()
 
 
@@ -169,12 +183,13 @@ if mode == 'plot' or mode == 'compute':
     cbar.set_label('Train Samples', fontsize=24)
     plt.tight_layout(w_pad=3)
     plt.show()
-    plt.savefig(os.path.join('Results',exp_folder_name, dataset,'pr_curves_summary.png'), dpi=400)
+    plt.savefig(os.path.join('Results',exp_folder_name, args.dataset,'pr_curves_summary.png'), dpi=400)
     plt.close()
 
 
 # Get results in test ##########################################################################
-if mode == 'test':
+# FIXME: Make possible to test with both wang and recount3
+if args.mode == 'test':
     
     complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
     pr_curve_list = []
@@ -189,13 +204,13 @@ if mode == 'test':
 
         # Declare dataset to test models
         curr_dataset = ToilDataset(os.path.join("data", "toil_data"),
-                            dataset = 'both',
+                            dataset = args.dataset,
                             tissue = 'all',
                             binary_dict=binary_dict,
                             mean_thr = -10.0,
                             std_thr = 0.0,
                             rand_frac = 1.0,
-                            sample_frac=0.5,
+                            sample_frac=args.sample_frac,
                             gene_list_csv = 'None',
                             label_type = 'phenotype',
                             batch_normalization='normal',
@@ -280,7 +295,7 @@ if mode == 'test':
     cbar.set_label('Train Samples', fontsize=24)
     plt.tight_layout(w_pad=3)
     plt.show()
-    plt.savefig(os.path.join('Results',exp_folder_name, dataset,'pr_curves_summary_test.png'), dpi=400)
+    plt.savefig(os.path.join('Results',exp_folder_name, args.dataset,'pr_curves_summary_test.png'), dpi=400)
     plt.close()
         
 

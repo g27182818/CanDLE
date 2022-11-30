@@ -2,8 +2,8 @@
 # GPU to use
 GPU=0
 # Dataset parameters #####################################
-SOURCE=recount3
-DATASET=tcga
+SOURCE=toil
+DATASET=both
 TISSUE=all
 ALL_VS_ONE=False
 MEAN_THR=-10.0
