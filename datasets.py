@@ -19,6 +19,7 @@ from umap import UMAP
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import TensorDataset, DataLoader
 from utils import *
 
@@ -213,7 +214,6 @@ class gtex_tcga_dataset():
             general_stats.to_csv(os.path.join(self.path, 'general_stats.csv'))
 
         return general_stats
-
 
     # This function filters out genes by mean, standard deviation, expression fraction, random fraction or list of genes
     def filter_genes(self):
@@ -553,6 +553,7 @@ class gtex_tcga_dataset():
         plot_dim_reduction(reduced_dict, meta_df, color_type='tissue', cmap='brg')
         plot_dim_reduction(reduced_dict, meta_df, color_type='class', cmap='brg')
 
+# Reading functions for all datasets
 def read_toil(path, force_compute):
         """
         Reads data from the Toil data set with root path and returns matrix_data, categories and phenotypes dataframes.
@@ -831,6 +832,8 @@ def read_recount3(path, force_compute):
         print("Time to load data: {} s".format(round(end - start, 3)))
         return matrix_data, global_meta
 
+
+# Specific dataset declaration
 class ToilDataset(gtex_tcga_dataset):
     def __init__(self, path, read_func=read_toil, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', partition_seed=0, force_compute=False):
         super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, partition_seed, force_compute)

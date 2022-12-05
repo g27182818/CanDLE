@@ -48,7 +48,7 @@ args = parser.parse_args()
 
 # Miscellaneous parameters --------------------------------------------------------------------------------------------#
 torch.manual_seed(12345)            # Set torch manual seed                                                            #
-device = torch.device("cuda")       # Set cuda device                                                                  # # TODO: Make cuda or cpu if cuda is not available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")       # Set cuda device                          #
 # ---------------------------------------------------------------------------------------------------------------------#
 
 # Handle the possibility of an all vs one binary problem
