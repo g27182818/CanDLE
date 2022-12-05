@@ -65,9 +65,8 @@ if args.source == 'toil':
                             tissue = args.tissue,                       binary_dict=binary_dict,
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         label_type = 'phenotype',
-                            batch_normalization=args.batch_norm,        partition_seed = args.seed,
-                            force_compute = False)
+                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
+                            partition_seed = args.seed,                 force_compute = False)
 
 elif args.source == 'wang':
     dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
