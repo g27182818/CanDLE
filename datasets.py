@@ -38,7 +38,7 @@ pylab.rcParams.update(params)
 class gtex_tcga_dataset():
     def __init__(self, path, read_func, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-10.0,
                 std_thr=0.01, rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None',
-                batch_normalization='None', partition_seed=0, force_compute = False):
+                batch_normalization='None', fold_number=5, partition_seed=0, force_compute = False):
 
         self.path = path
         self.read_func = read_func
@@ -56,6 +56,7 @@ class gtex_tcga_dataset():
         self.sample_frac = sample_frac
         self.gene_list_csv = gene_list_csv
         self.batch_normalization = batch_normalization
+        self.fold_number = fold_number
         self.partition_seed = partition_seed # seed for train/val/test split
         self.force_compute = force_compute
 
@@ -79,11 +80,16 @@ class gtex_tcga_dataset():
         # self.filter_by_tissue()
         # Make the problem binary in case self.binary_dict is not empty
         self.make_binary_problem() # If self.binary_dict == {} this function does nothing
-        # Split data into train, validation and test sets. This function uses self.label_df to split the data with the same proportion.
-        self.split_labels, self.split_matrices = self.split_data() # For split_matrices samples are columns and genes are rows
-
+        # Get k fold cross validator. This is stratified
+        self.k_fold_cross_validator = StratifiedKFold(n_splits=self.fold_number, shuffle=True, random_state=self.partition_seed)
+        # Get k fold indexes
+        self.k_fold_indexes = self.get_k_fold_indexes()
         # Define number of classes for classification
         self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
+        # Define the number of samples
+        self.num_samples = len(self.label_df)
+        # Define the number of genes
+        self.num_genes = len(self.filtered_gene_list)
 
         # Plot relevant plots here # TODO: Incorporate all the plots from Toil here
         # self.plot_dim_reduction()
@@ -331,46 +337,58 @@ class gtex_tcga_dataset():
             print(f"Number of samples in class 0: {len(self.label_df[self.label_df['lab_num'] == 0])}, number of samples in class 1: {len(self.label_df[self.label_df['lab_num'] == 1])}")
             return
 
-    # This function uses self.label_df to split the data into train, validation and test sets
-    def split_data(self):
-        train_val_lab, test_lab = train_test_split(self.label_df["lab_num"], test_size = 0.2, random_state = self.partition_seed, stratify = self.label_df["lab_num"].values)
-        train_lab, val_lab = train_test_split(train_val_lab, test_size = 0.25, random_state = self.partition_seed, stratify = train_val_lab.values)
-        # Use label indexes to subset the data in self.matrix_data_filtered
-        train_matrix = self.gene_filtered_data_matrix[train_lab.index]
-        val_matrix = self.gene_filtered_data_matrix[val_lab.index]
-        test_matrix = self.gene_filtered_data_matrix[test_lab.index]
-        train_val_matrix = self.gene_filtered_data_matrix[train_val_lab.index]
-        # Declare label dictionaries
-        split_labels = {"train": train_lab, "val": val_lab, "test": test_lab, "train_val": train_val_lab}
-        # Declare matrix dictionaries
-        split_matrices = {"train": train_matrix, "val": val_matrix, "test": test_matrix, "train_val": train_val_matrix}
-        # Both matrixes and labels are already shuffled
-        return split_labels, split_matrices
+    # Get the indexes of of each fold
+    def get_k_fold_indexes(self):
+        # Get dummy x data and real y values
+        dummy_x = np.zeros(len(self.label_df["lab_num"]))
+        global_y = np.ravel(self.label_df["lab_num"].values)
+        counter = 0
+        k_fold_indexes = {}
+        # Add k-fold indexes to dictionary
+        for train_index, test_index in self.k_fold_cross_validator.split(dummy_x, global_y):
+            k_fold_indexes[counter] = {'train_index': train_index, 'test_index': test_index}
+            counter = counter + 1
+        return k_fold_indexes
 
     # This function gets the dataloaders for the train, val and test sets
-    def get_dataloaders(self, batch_size):
-        # Select data partitions
-        # These data matrices have samples in rows and genes in columns
-        x_train = torch.Tensor(self.split_matrices["train"].T.values).type(torch.float)
-        x_val = torch.Tensor(self.split_matrices["val"].T.values).type(torch.float)
-        x_test = torch.Tensor(self.split_matrices["test"].T.values).type(torch.float)
+    def get_dataloaders(self, batch_size=100, fold=0):
+
+        # Get train and test indexes depending on the fold number
+        train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
+        
+        # Get train and test matrices and groundtruth
+        train_matrix, test_matrix = self.gene_filtered_data_matrix.iloc[:, train_index], self.gene_filtered_data_matrix.iloc[:, test_index]
+        train_gt, test_gt = self.label_df.iloc[train_index]['lab_num'], self.label_df.iloc[test_index]['lab_num'] 
+        
+        # Pass matrices to tensors and transpose them to have samples in rows and genes in columns
+        x_train = torch.Tensor(train_matrix.T.values).type(torch.float)
+        x_test = torch.Tensor(test_matrix.T.values).type(torch.float)
         
         # Cast labels as tensors
-        y_train = torch.Tensor(self.split_labels["train"].values).type(torch.long)
-        y_val = torch.Tensor(self.split_labels["val"].values).type(torch.long)
-        y_test = torch.Tensor(self.split_labels["test"].values).type(torch.long)
-
+        y_train = torch.Tensor(train_gt.values).type(torch.long)
+        y_test = torch.Tensor(test_gt.values).type(torch.long)
+        
         # Define train, val and test datasets
         train_dataset = TensorDataset(x_train, y_train)
-        val_dataset = TensorDataset(x_val, y_val)
         test_dataset = TensorDataset(x_test, y_test)
-
+        
         # Create dataloaders
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-        return train_loader, val_loader, test_loader
+        return train_loader, test_loader
+
+    # This function uses self.label_df to split the data into train, validation and test sets
+    def get_numpy_split(self, fold=0):
+        # Get train and test indexes depending on the fold number
+        train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
+        # Get train and test matrices and groundtruth
+        train_matrix, test_matrix = self.gene_filtered_data_matrix.iloc[:, train_index], self.gene_filtered_data_matrix.iloc[:, test_index]
+        train_gt, test_gt = self.label_df.iloc[train_index]['lab_num'], self.label_df.iloc[test_index]['lab_num'] 
+        # Declare x and y dictionary
+        split_dict = {'x': {'train': train_matrix, 'test': test_matrix}, 'y': {'train': train_gt, 'test': test_gt}}
+        # Return split dictionary
+        return split_dict
 
     # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
     def plot_filtering_histograms(self, filtering_info_df):        
@@ -553,6 +571,8 @@ class gtex_tcga_dataset():
         plot_dim_reduction(reduced_dict, meta_df, color_type='tissue', cmap='brg')
         plot_dim_reduction(reduced_dict, meta_df, color_type='class', cmap='brg')
 
+
+
 # Reading functions for all datasets
 def read_toil(path, force_compute):
         """
@@ -595,6 +615,10 @@ def read_toil(path, force_compute):
         tcga_healthy_bool = (categories['_sample_type']=="Solid Tissue Normal") & (categories['is_tcga'])
         # Map correctly healthy TCGA
         categories.loc[tcga_healthy_bool, 'lab_txt'] = categories.loc[tcga_healthy_bool, "_primary_site"].map(normal_tcga_2_gtex)
+        # Sort matrix data columns by samples name
+        matrix_data = matrix_data.reindex(sorted(matrix_data.columns), axis=1)
+        # Sort categories dataframe by sample name
+        categories.sort_index(inplace=True)
         end = time.time()
         print("Time to load data: {} s".format(round(end - start, 3)))
         return matrix_data, categories
@@ -708,6 +732,11 @@ def read_wang(path, force_compute):
         tqdm.pandas(desc="Computing Log2(x+1) transform")
         data_matrix = data_matrix.progress_apply(lambda x: np.log2(x+1))
         
+        # Sort matrix data columns by samples name
+        data_matrix = data_matrix.reindex(sorted(data_matrix.columns), axis=1)
+        # Sort categories dataframe by sample name
+        category_df.sort_index(inplace=True)
+
         # Reset index to save in feather file
         data_matrix.reset_index(inplace=True)
 
@@ -753,7 +782,7 @@ def read_recount3(path, force_compute):
             
             # Process TCGA metadata #############
             # Filter just important TCGA metadata
-            # TODO: Sample identifiers here are weird fot TCGA metadata and data matrix. It works but it would be better to standardize identifiers with wang and toil
+            # TODO: Sample identifiers here are weird for TCGA metadata and data matrix. It works but it would be better to standardize identifiers with wang and toil
             tcga_meta = tcga_meta[['Unnamed: 0', 'tcga.gdc_cases.project.project_id', 'tcga.gdc_cases.project.primary_site', 'tcga.cgc_sample_sample_type']]
             # Rename columns
             tcga_meta.columns = ['sample', 'lab_tcga', 'tissue', 'sample_type']
@@ -809,6 +838,11 @@ def read_recount3(path, force_compute):
             tqdm.pandas(desc="Computing Log2(x+1) transform")
             matrix_data = matrix_data.progress_apply(lambda x: np.log2(x+1))
 
+            # Sort samples in data matrix and global_meta
+            print('Sorting samples...')
+            matrix_data = matrix_data.reindex(sorted(matrix_data.columns), axis=1)
+            global_meta.sort_index(inplace=True)
+
             # Reset index to save in feather file
             matrix_data.reset_index(inplace=True)
 
@@ -835,16 +869,16 @@ def read_recount3(path, force_compute):
 
 # Specific dataset declaration
 class ToilDataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_toil, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_toil, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, fold_number, partition_seed, force_compute)
 
 class WangDataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_wang, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_wang, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, fold_number, partition_seed, force_compute)
 
 class Recount3Dataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_recount3, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_recount3, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, fold_number, partition_seed, force_compute)
 
 # Test code for dataset declaration
 
@@ -856,16 +890,18 @@ class Recount3Dataset(gtex_tcga_dataset):
 
 # Dataset tests
 
-# test_toil = ToilDataset(os.path.join("data", "toil_data"), batch_normalization='normal', dataset='both', force_compute=False)
-# test_wang = WangDataset(os.path.join('data', 'wang_data'), batch_normalization='normal', dataset='both', force_compute=False)
-# test_recount3 = Recount3Dataset(os.path.join('data', 'recount3_data'), batch_normalization='normal', dataset='both', force_compute=False)
+# test_toil =     ToilDataset(os.path.join("data", "toil_data"),          batch_normalization='normal', dataset='both', force_compute=False)
+# test_wang =     WangDataset(os.path.join('data', 'wang_data'),          batch_normalization='normal', dataset='both', force_compute=False)
+# test_recount3 = Recount3Dataset(os.path.join('data', 'recount3_data'),  batch_normalization='normal', dataset='both', force_compute=False)
 
 # Loader tests
 
-# train_loader_toil, val_loader_toil, test_loader_toil = test_toil.get_dataloaders(batch_size = 100)
-# train_loader_wang, val_loader_wang, test_loader_wang = test_wang.get_dataloaders(batch_size = 100)
-# train_loader_recount3, val_loader_recount3, test_loader_recount3 = test_recount3.get_dataloaders(batch_size = 100)
+# train_loader_toil, test_loader_toil = test_toil.get_dataloaders(batch_size = 100, fold = 0)
+# train_loader_wang, test_loader_wang = test_wang.get_dataloaders(batch_size = 100, fold = 0)
+# train_loader_recount3, test_loader_recount3 = test_recount3.get_dataloaders(batch_size = 100, fold = 0)
 
+
+##############################################################################################################################################
 
 
 

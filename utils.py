@@ -5,8 +5,11 @@ import os
 import seaborn as sn
 import pandas as pd
 from tqdm import tqdm
+import matplotlib
 import matplotlib.colors as colors
+from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import pylab
 
 # Set figure fontsizes
@@ -113,7 +116,6 @@ def test(loader, model, device, num_classes=34):
     # Whole correctly classified cases
     correct = np.sum(np.diag(conf_matrix))
     tot_acc = correct / len(loader.dataset)
-
     # Get binary GT matrix
     # Handle a binary problem because sklearn.preprocessing.label_binarize gives a matrix with only one column and two are needed
     if num_classes == 2:
@@ -131,18 +133,43 @@ def test(loader, model, device, num_classes=34):
     
     AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
     mean_AP = np.mean(AP_list)
+    
+    # Compute the probabilities of taking the correct decision
+    correct_prob = glob_prob[np.arange(len(glob_prob)), glob_true]
+    # Make a dataframe of correct_prob and true label
+    correct_prob_df = pd.DataFrame({'lab_num': glob_true, 'correct_prob': correct_prob})
+
 
     # Assign results
-    metric_result["mean_acc"] = mean_acc
-    metric_result["tot_acc"] = tot_acc
-    metric_result["conf_matrix"] = conf_matrix
-    metric_result["mean_AP"] = mean_AP
-    metric_result["AP_list"] = AP_list
+    metric_result['mean_acc'] = mean_acc
+    metric_result['tot_acc'] = tot_acc
+    metric_result['conf_matrix'] = conf_matrix
+    metric_result['mean_AP'] = mean_AP
+    metric_result['AP_list'] = AP_list
+    metric_result['correct_prob_df'] = correct_prob_df
 
     return metric_result
 
 
-def print_epoch(train_dict, test_dict, loss, epoch, path):
+def print_both(p_string, f):
+    """
+    This function prints p_string in terminal and to a .txt file with handle f 
+
+    Parameters
+    ----------
+    p_string : str
+        String to be printed.
+    f : file
+        Txt file handle indicating where to print. 
+    """
+    print(p_string)
+    # f.write(p_string)
+    # f.write('\n')
+    print(p_string, file=f)
+    print('\n', file=f)
+
+
+def print_epoch(train_dict, test_dict, loss, epoch, fold, path):
     """
     This function prints in terminal a table with all available metrics in all test groups (train, test) for an specific epoch.
     It also writes this table to the training log specified in path.
@@ -152,7 +179,7 @@ def print_epoch(train_dict, test_dict, loss, epoch, path):
     :param epoch: (int) Epoch number.
     :param path: (str) Training log path.
     """
-    rows = ["Train", "Val"]
+    rows = ['Train', 'Test']
     data = np.zeros((2, 1))
     headers = []
     counter = 0
@@ -160,7 +187,7 @@ def print_epoch(train_dict, test_dict, loss, epoch, path):
     # Construction of the metrics table
     for k in train_dict.keys():
         # Handle metrics that cannot be printed
-        if (k == "conf_matrix") or (k == "AP_list") or (k == "epoch") or (k == "pr_curve"):
+        if (k == 'conf_matrix') or (k == 'AP_list') or (k == 'epoch') or (k == 'pr_curve') or (k == 'correct_prob_df'):
             continue
         headers.append(k)
 
@@ -171,28 +198,82 @@ def print_epoch(train_dict, test_dict, loss, epoch, path):
         data[1, counter] = test_dict[k]
         counter += 1
 
-    # Print metrics to console
-    print('-----------------------------------------')
-    print('                                         ')
-    print("Epoch "+str(epoch+1)+":")
-    print("Loss = " + str(loss.cpu().detach().numpy()))
-    print('                                         ')
     data_frame = pd.DataFrame(data, index=rows, columns=headers)
-    print(data_frame)
-    print('                                         ')
-    # Save metrics to a training log
+
+    # Print metrics to console and log
     with open(path, 'a') as f:
-        print('-----------------------------------------', file=f)
-        print('                                         ', file=f)
-        print("Epoch " + str(epoch + 1) + ":", file=f)
-        print("Loss = " + str(loss.cpu().detach().numpy()), file=f)
-        print('                                         ', file=f)
-        print(data_frame, file=f)
-        print('                                         ', file=f)
+        print_both('-'*100, f)
+        print_both('\n', f)
+        print_both(f'Fold {fold}, Epoch {epoch+1}:', f)
+        print_both(f'Loss = {loss.cpu().detach().numpy()}', f)
+        print_both('\n', f)
+        print_both(data_frame, f)
+        print_both('\n', f)
+    
+
+def print_final_performance(fold_performance, path):
+
+    # Declare the invalid metrics for not considering them
+    invalid_metrics = ['conf_matrix', 'AP_list', 'epoch', 'pr_curve', 'correct_prob_df']
+    # Obtain a list of the metric dicts for test in the last epoch
+    final_test_list = [fold_performance[fold]['test'][-1] for fold in fold_performance.keys()]
+    # Obtain a list of the valid metrics
+    valid_metrics = [metric for metric in final_test_list[0].keys() if not(metric in invalid_metrics)]
+    # Declare empty metric matrix. It has first all the folds data and then the mean and std
+    metric_matrix = np.zeros((len(final_test_list), len(valid_metrics)))
+
+    # Assign data of each fold
+    for i in range(len(final_test_list)):
+        for j in range(len(valid_metrics)):
+            metric_matrix[i,j] = final_test_list[i][valid_metrics[j]]
+    
+    # Get a matrix of various statistics of the folds
+    statistic_matrix = np.vstack((  np.ndarray.min(metric_matrix, axis=0, keepdims=True),
+                                    np.ndarray.max(metric_matrix, axis=0, keepdims=True),
+                                    np.mean(metric_matrix, axis=0, keepdims=True),
+                                    np.std(metric_matrix, axis=0, keepdims=True)))
+    
+    # Obtain index and matrix for print data frame
+    index = [f'Fold {i+1}' for i in range(len(final_test_list))]
+    index.extend(['Min', 'Max', 'Mean', 'Std'])
+
+    metric_stats_matrix = np.vstack((metric_matrix, statistic_matrix))
+    
+    # Define printing dataframe
+    print_df = pd.DataFrame(metric_stats_matrix, index=index, columns=valid_metrics)
+    print_df.index.name = 'Measure'
+
+    # Get the final epoch whose results we are plotting
+    final_epoch = len(fold_performance[0]['test'])
+
+    # Open log file and print
+    with open(path, 'a') as f:
+        print_both('-'*100, f)
+        print_both('\n', f)
+        print_both(f'General results at epoch {final_epoch}:', f)
+        print_both(print_df, f)
+  
+
+def get_paths(exp_name):
+    results_path = os.path.join("results", exp_name)
+    path_dict = {'results': results_path,
+                 'train_log': os.path.join(results_path, "training_log.txt"),
+                 'metrics': os.path.join(results_path, "metric_dicts.pickle"),
+                 'train_fig': os.path.join(results_path, "training_performance.png"),
+                 'conf_matrix_fig': os.path.join(results_path, "confusion_matrix"),
+                 'violin_conf_fig': os.path.join(results_path, "violin_confidence.png"),
+                 'pr_fig': os.path.join(results_path, "pr_curves.png"),
+                 'rankings': os.path.join('rankings'),
+                 '1_ranking': os.path.join('rankings','1_candle_ranking.csv'),
+                 'figures': os.path.join('figures'),
+                 'weights_demo_fig': os.path.join('figures','random_class_weights_plot.png')}
+    
+    return path_dict
 
 
-def plot_training(train_list, val_list, loss, save_path):
+def plot_training(fold_performance, save_path):
     """
+    FIXME: Update documentation
     This function plots a 2X1 figure. The left figure has the training performance in train and val. The right figure has
     the evolution of the mean training loss over the epochs.
     :param train_list: (dict list) List containing the train metric dictionaries according to the test() function. One
@@ -202,42 +283,47 @@ def plot_training(train_list, val_list, loss, save_path):
     :param loss: (list) Training loss value list. One value per epoch.
     :param save_path: (str) The path to save the figure.
     """
-    total_epochs = len(loss)
+
+    global_folds_dict = {}
+    for key in fold_performance.keys():
+        fold_train_list = fold_performance[key]['train']
+        fold_test_list = fold_performance[key]['test']
+        fold_loss_list = fold_performance[key]['loss']
+
+        fold_dict = {'Train mACC': [], 'Train mAP': [], 'Test mACC': [], 'Test mAP': [], 'Loss':[]}
+
+        for i in range(len(fold_loss_list)):
+            fold_dict['Loss'].append(float(fold_loss_list[i]))
+            fold_dict['Train mACC'].append(fold_train_list[i]['mean_acc'])
+            fold_dict['Train mAP'].append(fold_train_list[i]['mean_AP'])
+            fold_dict['Test mACC'].append(fold_test_list[i]['mean_acc'])
+            fold_dict['Test mAP'].append(fold_test_list[i]['mean_AP'])
+
+        global_folds_dict[key] = fold_dict
+
+    global_folds_dict = {(innerKey, outerKey+1): values for outerKey, innerDict in global_folds_dict.items() for innerKey, values in innerDict.items()}
     
-    # Extract mAP data
-    data_train_mAP = [metric_dict["mean_AP"] for metric_dict in train_list]
-    data_val_mAP = [metric_dict["mean_AP"] for metric_dict in val_list]
-    # Extract acc data
-    data_train_acc = [metric_dict["mean_acc"] for metric_dict in train_list]
-    data_val_acc = [metric_dict["mean_acc"] for metric_dict in val_list]
-    # Join data
-    data_train = [data_train_acc, data_train_mAP]
-    data_val = [data_val_acc, data_val_mAP]
-    y_label = "Mean AP / Mean Accuracy"
-    legends = ["Train mACC", "Train mAP", "Val mACC", "Val mAP"]
-    
-    # Generate performance plot
-    plt.figure(figsize=(20, 7))
-    plt.subplot(1, 2, 1)
-    plt.plot(np.arange(total_epochs), np.array(data_train).transpose(), '-o')
-    plt.plot(np.arange(total_epochs), np.array(data_val).transpose(), '-o')
-    plt.grid()
-    plt.xlabel("Epochs", fontsize=20)
-    plt.ylabel(y_label, fontsize=20)
-    plt.title("Model performance", fontsize=25)
-    plt.legend(legends)
+    plotting_df = pd.DataFrame(global_folds_dict)
+    plotting_df.index += 1
+    plotting_df.index.name = 'Epoch'
 
-    plt.subplot(1, 2, 2)
-    plt.plot(np.arange(total_epochs), np.array(loss), '-o')
-    plt.grid()
-    plt.xlabel("Epochs", fontsize=20)
-    plt.ylabel("Loss", fontsize=20)
-    plt.title("Model Loss", fontsize=25)
-
-    plt.savefig(save_path, dpi=200)
+    handles = [Line2D([0], [0], color='k', label='Train'), Line2D([0], [0], color='darkcyan', label='Test')]
+    fig, ax = plt.subplots(1, 3)
+    plotting_df['Train mACC'].plot(ax=ax[0], grid=True, xlabel='Epochs', ylabel='Balanced Accuracy', color='k', xlim=[1, len(plotting_df)], ylim=[None,1], legend=False)
+    plotting_df['Test mACC'].plot(ax=ax[0], grid=True, xlabel='Epochs', ylabel='Balanced Accuracy', color='darkcyan', xlim=[1, len(plotting_df)], ylim=[None,1], legend=False)
+    plotting_df['Train mAP'].plot(ax=ax[1], grid=True, xlabel='Epochs', ylabel='Mean Average Precision', color='k', xlim=[1, len(plotting_df)], ylim=[None,1], legend=False)
+    plotting_df['Test mAP'].plot(ax=ax[1], grid=True, xlabel='Epochs', ylabel='Mean Average Precision', color='darkcyan', xlim=[1, len(plotting_df)], ylim=[None,1], legend=False)
+    plotting_df['Loss'].plot(ax=ax[2], grid=True, xlabel='Epochs', ylabel='Loss', color='k', xlim=[1, len(plotting_df)], ylim=[0,None], legend=False)
+    ax[0].legend(handles=handles)
+    ax[1].legend(handles=handles)
+    [(axis.spines.right.set_visible(False), axis.spines.top.set_visible(False)) for axis in ax]
+    fig.suptitle('Model Training Performance', fontsize=20)
+    fig.set_size_inches((18,5))
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=300)
 
 
-def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path):
+def plot_conf_matrix(fold_performance, lab_txt_2_lab_num, save_path):
     """
     Plots a heatmap for all the important confusion matrices (train, test). All matrices enter as a
     numpy array.
@@ -253,12 +339,19 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
         classes = [0, 1]
     else:
         binary_problem = False
-        classes = sorted(list(lab_txt_2_lab_num.keys()))
+        lab_num_2_lab_txt = {v: k for k, v in lab_txt_2_lab_num.items()}
+        class_values_list = sorted(list(lab_txt_2_lab_num.values()))
+        classes = [lab_num_2_lab_txt[lab] for lab in class_values_list]
+
+    # Add all the test confusion matrices from each fold
+    glob_conf_mat = sum([fold_dict['test'][-1]['conf_matrix'] for fold_dict in fold_performance.values()])
+
 
     # Define dataframes
-    df_train = pd.DataFrame(train_conf_mat, classes, classes)
-    df_test = pd.DataFrame(test_conf_mat, classes, classes)
-
+    conf_mat_df = pd.DataFrame(glob_conf_mat, classes, classes)
+    # If a NaN resulted from the division a -1 is inserted
+    p_df = round(conf_mat_df.div(conf_mat_df.sum(axis=0), axis=1), 2).fillna(-1)
+    r_df = round(conf_mat_df.div(conf_mat_df.sum(axis=1), axis=0), 2).fillna(-1)
     # Plot params
     scale = 1.5 if binary_problem==False else 3.0
     fig_size = (50, 30)
@@ -268,12 +361,11 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     d_colors = ["white", "darkcyan"]
     cmap1 = LinearSegmentedColormap.from_list("mycmap", d_colors)
 
-    # Plot confusion matrix for train
+    # Plot global confusion matrix
     plt.figure(figsize=fig_size)
     sn.set(font_scale=scale)
-    ax = sn.heatmap(df_train, annot=True, linewidths=.5, fmt='g', cmap=cmap1,
-                    linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
-    plt.title("Train Confusion Matrix", fontsize=tit_size)
+    ax = sn.heatmap(conf_mat_df, annot=True, linewidths=.5, fmt='g', cmap=cmap1, linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
+    plt.title("Confusion Matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
     ax.tick_params(labelsize=lab_size)
@@ -281,16 +373,15 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     plt.ylabel("Groundtruth", fontsize=tit_size)
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(labelsize=lab_size)
+    cbar.ax.set_ylabel('Number of Samples', fontsize=tit_size)
     plt.tight_layout()
-    plt.savefig(save_path+"_train.png", dpi=200)
+    plt.savefig(save_path+".png", dpi=200)
     plt.close()
 
-    # Plot confusion matrix for test
+    # Plot precision matrix
     plt.figure(figsize=fig_size)
-    sn.set(font_scale=scale)
-    ax = sn.heatmap(df_test, annot=True, linewidths=.5, fmt='g', cmap=cmap1,
-                    linecolor='k', norm=colors.LogNorm(vmin=0.1, vmax=1000))
-    plt.title("Validation Confusion Matrix", fontsize=tit_size)
+    ax = sn.heatmap(p_df, annot=True, linewidths=.5, fmt='g', cmap=cmap1, linecolor='k', vmin=0.0, vmax=1)
+    plt.title("Precision Matrix", fontsize=tit_size)
     plt.yticks(rotation=0)
     plt.xticks(rotation=90)
     ax.tick_params(labelsize=lab_size)
@@ -298,9 +389,67 @@ def plot_conf_matrix(train_conf_mat, test_conf_mat, lab_txt_2_lab_num, save_path
     plt.ylabel("Groundtruth", fontsize=tit_size)
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(labelsize=lab_size)
+    cbar.ax.set_ylabel('Precision', fontsize=tit_size)
     plt.tight_layout()
-    plt.savefig(save_path + "_val.png", dpi=200)
+    plt.savefig(save_path + "_p.png", dpi=200)
     plt.close()
+    
+    # Plot recall matrix
+    plt.figure(figsize=fig_size)
+    ax = sn.heatmap(r_df, annot=True, linewidths=.5, fmt='g', cmap=cmap1, linecolor='k', vmin=0.0, vmax=1)
+    plt.title("Recall Matrix", fontsize=tit_size)
+    plt.yticks(rotation=0)
+    plt.xticks(rotation=90)
+    ax.tick_params(labelsize=lab_size)
+    plt.xlabel("Predicted", fontsize=tit_size)
+    plt.ylabel("Groundtruth", fontsize=tit_size)
+    cbar = ax.collections[0].colorbar
+    cbar.ax.tick_params(labelsize=lab_size)
+    cbar.ax.set_ylabel('Recall', fontsize=tit_size)
+    plt.tight_layout()
+    plt.savefig(save_path + "_r.png", dpi=200)
+    plt.close()
+
+def plot_confidence_violin(fold_performance, lab_txt_2_lab_num, save_path):
+    
+    # Get a list of all the correct probabilities dataframes
+    confidence_df_list = [fold_performance[fold]['test'][-1]['correct_prob_df'] for fold in fold_performance.keys()]
+    # Concatenate all folds in a global dataframe
+    global_confidence_df = pd.concat(confidence_df_list, ignore_index=True)
+    # Reverse lab_txt_2_lab_num dict
+    lab_num_2_lab_txt = {v: k for k, v in lab_txt_2_lab_num.items()}
+    # Obtain a column with all textual labels
+    global_confidence_df['lab_txt'] = global_confidence_df['lab_num'].map(lab_num_2_lab_txt)
+
+    # Code to compute the ordering of the violins
+    median_ordered_confidence_df = global_confidence_df.groupby('lab_txt').median().sort_values('correct_prob', ascending=False)
+    # Get ordered TCGA and GTEx
+    ordered_tcga = median_ordered_confidence_df.index[median_ordered_confidence_df.index.str.contains('TCGA')]
+    ordered_gtex = median_ordered_confidence_df.index[median_ordered_confidence_df.index.str.contains('GTEX')]
+    # Join both orders in a global order
+    lab_order = ordered_tcga.append(ordered_gtex)
+
+    d_colors = ["white", "darkcyan"]
+    cmap = LinearSegmentedColormap.from_list("mycmap", d_colors)
+    norm = colors.LogNorm(vmin=5, vmax=1000)
+    sample_count_df = global_confidence_df['lab_txt'].value_counts()
+    color_df= sample_count_df.apply(lambda x: cmap(norm(x)))
+    palette = color_df.to_dict()
+
+    fig, ax = plt.subplots(1,1)
+    sn.violinplot(data=global_confidence_df, x='lab_txt', y='correct_prob', ax=ax, cut=0, scale='width', order = lab_order, inner='box', palette=palette)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation = 90)
+    ax.set_xlabel(None)
+    ax.set_ylabel('Confidence Score')
+    ax.set_title('Confidence Scores per Class')
+    m = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+    m.set_array([])
+    cbar = plt.colorbar(m, ax=ax, label='Number of Samples', aspect= 20, pad=0.02)
+    cbar.ax.tick_params(labelsize=15)
+    ax = cbar.ax
+    fig.set_size_inches((15, 7))
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=300)
 
 
 def plot_pr_curve(pr_curve_train, pr_curve_val, save_path):

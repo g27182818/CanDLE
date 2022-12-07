@@ -32,6 +32,7 @@ parser.add_argument('--rand_frac',      type=float, default=1.0,            help
 parser.add_argument('--sample_frac',    type=float, default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
 parser.add_argument('--gene_list_csv',  type=str,   default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
 parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                                                                                                          choices=["None", "normal", "healthy_tcga"])
+parser.add_argument('--fold_number',    type=int,   default=5,              help="The number of folds to use in stratified k-fold cross-validation. Minimum 2. In general more than 5 can cause errors.")
 parser.add_argument('--seed',           type=int,   default=0,              help="Partition seed to divide tha data. Default is 0.")
 
 
@@ -66,7 +67,8 @@ if args.source == 'toil':
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            partition_seed = args.seed,                 force_compute = False)
+                            fold_number = args.fold_number,             partition_seed = args.seed,
+                            force_compute = False)
 
 elif args.source == 'wang':
     dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
@@ -74,7 +76,8 @@ elif args.source == 'wang':
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            partition_seed = args.seed,                 force_compute = False)
+                            fold_number = args.fold_number,             partition_seed = args.seed,
+                            force_compute = False)
 
 elif args.source == 'recount3':
     dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
@@ -82,155 +85,124 @@ elif args.source == 'recount3':
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            partition_seed = args.seed,                 force_compute = False)
-                   
-# Dataloader declaration
-train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size = args.batch_size)
-
+                            fold_number = args.fold_number,             partition_seed = args.seed,
+                            force_compute = False)
 
 # Calculate loss function weights
-distribution = np.bincount(np.ravel(dataset.split_labels["train_val"].values).astype(np.int64))
+distribution = np.bincount(np.ravel(dataset.label_df['lab_num']).astype(np.int64))
 loss_weights = 2500000 / (distribution**2)
 lw_tensor = torch.tensor(loss_weights, dtype=torch.float).to(device)
 
-# Model definition
-model = MLP([len(dataset.filtered_gene_list)], out_size = dataset.num_classes ).to(device)
-# Print to console model definition
-print("The model definition is:")
-print(model)
-
-# Define optimizer and criterion
-optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))
-if args.weights == 'True':
-    criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor)
-else:
-    criterion = torch.nn.CrossEntropyLoss() # Experiment without weights
-
-# Lists declarations
-train_metric_lst = []
-val_metric_lst = []
-loss_list = []
-
-# Declare results path
-# TODO: Make function that returns all the paths
-results_path = os.path.join("Results", args.exp_name)
-# Declare log path
-train_log_path = os.path.join(results_path, "TRAINING_LOG.txt")
-# Declare metric dicts path
-metrics_log_path = os.path.join(results_path, "metric_dicts.pickle")
-# Declare path to save performance training plot
-train_performance_fig_path = os.path.join(results_path, "training_performance.png")
-# Declare path to save final confusion matrices
-conf_matrix_fig_path = os.path.join(results_path, "confusion_matrix")
-# Declare path to save pr curves for binary classification
-pr_curves_fig_path = os.path.join(results_path, "pr_curves.png")
+# Declare all the saving paths needed
+path_dict = get_paths(args.exp_name)
 
 # Create results directory
-if not os.path.isdir(results_path):
-    os.makedirs(results_path)
+if not os.path.isdir(path_dict['results']):
+    os.makedirs(path_dict['results'])
+
+fold_performance = {}
 
 if (args.mode == "train") or (args.mode == 'both'):
     
-    # Stop auxiliary variables
-    stop = False
-    epoch = 0
-    best_macc = -1
-    best_epoch = -1
+    for i in range(args.fold_number):
 
-    # Train/test cycle
-    while stop == False:
+        # Model definition
+        model = MLP([dataset.num_genes], out_size = dataset.num_classes ).to(device)
+        # Print to console model definition
+        print("The model definition is:")
+        print(model)
 
-    # for epoch in range(args.epochs):
-        print('-----------------------------------------')
-        print("Epoch " + str(epoch+1) + ":")
-        print('                                         ')
-        print("Start training:")
+        # Define optimizer and criterion
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))
+        criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor) if args.weights == 'True' else torch.nn.CrossEntropyLoss()
 
-        # Train one epoch
-        loss = train(train_loader, model, device, criterion, optimizer)
+        # Dataloader declaration
+        train_loader, test_loader = dataset.get_dataloaders(batch_size = args.batch_size, fold=i)
 
-        # Obtain test metrics for each epoch in all groups
-        print('                                         ')
-        print("Obtaining train metrics:")
-        train_metrics = test(train_loader, model, device, num_classes=dataset.num_classes)
+        # Performance lists declarations
+        train_metric_lst = []
+        test_metric_lst = []
+        loss_list = []
 
-        print('                                         ')
-        print("Obtaining val metrics:")
-        val_metrics = test(val_loader, model, device, num_classes=dataset.num_classes)
+        # Stop auxiliary variables
+        stop = False
+        epoch = 0
+        best_macc = -1
+        best_epoch = -1
 
-        # Add epoch information to the dictionaries
-        train_metrics["epoch"] = epoch
-        val_metrics["epoch"] = epoch
-
-        # Append data to list
-        train_metric_lst.append(train_metrics)
-        val_metric_lst.append(val_metrics)
-        loss_list.append(loss.cpu().detach().numpy())
-        
-        # Get if this epoch has the best model
-        if val_metrics['mean_acc'] > best_macc:
-            best_epoch = epoch
-            best_macc = val_metrics['mean_acc']
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': loss},
-                os.path.join(results_path, "best_model.pt"))
-
-        # Handle args.epochs = -1 to stop until training convergence
-        if (args.epochs == -1) and ((epoch - best_epoch) > 30):
-            # Save last model and stop training if the val metrics have not improved in the las 30 epochs
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': loss},
-                os.path.join(results_path, "checkpoint_epoch_"+str(epoch+1)+".pt"))
-            stop = True
-
-        # Save checkpoint and stop cycle at last epoch
-        elif epoch+1== args.epochs:
-            torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 'loss': loss},
-                        os.path.join(results_path, "checkpoint_epoch_"+str(epoch+1)+".pt"))
+        # Train/test cycle
+        while stop == False:
+        # for epoch in range(args.epochs):
+            print('-'*89)
+            print(f'Fold {i+1}, Epoch {epoch+1} :')
+            print('\n')
+            # Train one epoch
+            loss = train(train_loader, model, device, criterion, optimizer)
             
-            # Stop cycle              
-            stop = True
-        
-        # Print performance
-        print_epoch(train_metrics, val_metrics, loss, epoch, train_log_path)
-        print(f'The best epoch is {best_epoch+1} with macc of {best_macc}')
-        with open(train_log_path, 'a') as f:
-            print(f'The best epoch is {best_epoch+1} with macc of {best_macc}', file=f)
+            # Obtain test metrics for each epoch in all groups
+            train_metrics = test(train_loader, model, device, num_classes=dataset.num_classes)
+            test_metrics = test(test_loader, model, device, num_classes=dataset.num_classes)
 
-        # Pass to next epoch
-        epoch = epoch + 1
+            # Add epoch information to the dictionaries
+            train_metrics['epoch'], test_metrics['epoch'] = epoch, epoch
 
-    # Save metrics dicts
-    complete_metric_dict = {"train": train_metric_lst,
-                            "val": val_metric_lst,
-                            "loss": loss_list}
+            # Append data to list
+            train_metric_lst.append(train_metrics), test_metric_lst.append(test_metrics), loss_list.append(loss.cpu().detach().numpy())
+            
+            # Get if this epoch has the best model
+            if test_metrics['mean_acc'] > best_macc:
+                best_epoch = epoch
+                best_macc = test_metrics['mean_acc']
+                torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 'loss': loss}, os.path.join(path_dict['results'], f'fold_{i+1}_best_model.pt'))
 
-    with open(metrics_log_path, 'wb') as f:
-        pickle.dump(complete_metric_dict, f)
+            # Handle args.epochs = -1 to stop until training convergence
+            # FIXME: do this with the loss
+            if (args.epochs == -1) and ((epoch - best_epoch) > 30):
+                # Save last model and stop training if the test metrics have not improved in the las 30 epochs
+                torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 'loss': loss}, os.path.join(path_dict['results'], f'fold_{i+1}_checkpoint_epoch_{epoch+1}.pt'))
+                stop = True
+
+            # Save checkpoint and stop cycle at last epoch
+            elif epoch+1== args.epochs:
+                torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 'loss': loss}, os.path.join(path_dict['results'], f'fold_{i+1}_checkpoint_epoch_{epoch+1}.pt'))
+                stop = True
+            
+            # Print performance
+            print_epoch(train_metrics, test_metrics, loss, epoch, i+1, path_dict['train_log'])
+            with open(path_dict['train_log'], 'a') as f:
+                print_both(f'The best epoch is {best_epoch+1} with mACC of {round(best_macc, 5)}\n',f)
+
+            # Pass to next epoch
+            epoch = epoch + 1
+
+        fold_performance[i] = {'train': train_metric_lst, 'test': test_metric_lst, 'loss': loss_list}
+    
+
+    with open(path_dict['metrics'], 'wb') as f:
+        pickle.dump(fold_performance, f)
 
     # Generate training performance plot and save it to train_performance_fig_path
-    plot_training(train_metric_lst, val_metric_lst, loss_list, train_performance_fig_path)
+    plot_training(fold_performance, path_dict['train_fig'])
 
     # Plot PR curve if the problem is binary
+    # FIXME: Solve PR plotting with multiple folds
     if dataset.num_classes == 2:
-        plot_pr_curve(train_metrics["pr_curve"], val_metrics["pr_curve"], pr_curves_fig_path)
+        plot_pr_curve(train_metrics["pr_curve"], test_metrics["pr_curve"], path_dict['pr_fig'])
                       
     # Generate confusion matrices plot and save it to conf_matrix_fig_path
-    plot_conf_matrix(train_metrics["conf_matrix"],
-                        val_metrics["conf_matrix"],
-                        dataset.lab_txt_2_lab_num,
-                        conf_matrix_fig_path)
+    plot_conf_matrix(fold_performance, dataset.lab_txt_2_lab_num, path_dict['conf_matrix_fig'])
 
+    # TODO: Add a way to print the generalized performance over folds
+    print_final_performance(fold_performance, path_dict['train_log'])
+
+    # TODO: Make decision confidence plot with the score probabilities
+    plot_confidence_violin(fold_performance, dataset.lab_txt_2_lab_num, path_dict['violin_conf_fig'])
+
+# TODO: Solve tha interpretation protocol now that we have k-folds
 # TODO: Handle the loading of the best model or the last model. Right now it only tests if there is a fixed number of epochs                        
 if ((args.mode == 'test') or (args.mode == 'both')) & (args.epochs>-1):
     # Declare path to load final model
-    final_model_path = os.path.join(results_path, "checkpoint_epoch_"+str(args.epochs)+".pt")
+    final_model_path = os.path.join(path_dict['results'], f'checkpoint_epoch_{args.epochs}.pt')
 
     # Load final model dicts
     total_saved_dict = torch.load(final_model_path)
@@ -248,7 +220,7 @@ if ((args.mode == 'test') or (args.mode == 'both')) & (args.epochs>-1):
     test_metrics = test(test_loader, model, device, num_classes=dataset.num_classes)
     # Print test metrics
     print(f'Test metrics: mean_acc {test_metrics["mean_acc"]} | tot_acc {test_metrics["tot_acc"]} | mean_AP {test_metrics["mean_AP"]}')
-    with open(train_log_path, 'a') as f:
+    with open(path_dict['train_log'], 'a') as f:
         print(f'Test metrics: mean_acc {test_metrics["mean_acc"]} | tot_acc {test_metrics["tot_acc"]} | mean_AP {test_metrics["mean_AP"]}', file=f)
 
     # FIXME: Do interpretation only if dataset=='both'
@@ -291,11 +263,11 @@ if ((args.mode == 'test') or (args.mode == 'both')) & (args.epochs>-1):
     print(rank_frec_df)
 
     # Make directory for Rankings if it does not exist
-    if not os.path.exists(os.path.join('Rankings')):
-        os.makedirs(os.path.join('Rankings'))
+    if not os.path.exists(path_dict['rankings']):
+        os.makedirs(path_dict['rankings'])
         
     # Save weights to csv
-    pd.DataFrame(rank_frec_df).to_csv(os.path.join('Rankings','1_candle_ranking.csv'))
+    pd.DataFrame(rank_frec_df).to_csv(path_dict['1_ranking'])
 
     # Make scatter plot of weights of a single random class
     rand_int = np.random.randint(0,len(tcga_indexes))
@@ -315,7 +287,7 @@ if ((args.mode == 'test') or (args.mode == 'both')) & (args.epochs>-1):
     plt.tight_layout()
 
     # Make directory to save random weights plot
-    if not os.path.exists(os.path.join('Figures')):
-        os.makedirs(os.path.join('Figures'))
+    if not os.path.exists(path_dict['figures']):
+        os.makedirs(path_dict['figures'])
 
-    plt.savefig(os.path.join('Figures','random_class_weights_plot.png'), dpi=300)
+    plt.savefig(path_dict['weights_demo_fig'], dpi=300)
