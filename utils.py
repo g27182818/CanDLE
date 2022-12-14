@@ -2,6 +2,7 @@ import sklearn.metrics
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import argparse
 import seaborn as sn
 import pandas as pd
 from tqdm import tqdm
@@ -9,7 +10,6 @@ import matplotlib
 import matplotlib.colors as colors
 from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import pylab
 
 # Set figure fontsizes
@@ -20,6 +20,22 @@ params = {'legend.fontsize': 'large',
          'ytick.labelsize':'large'}
 pylab.rcParams.update(params)
 
+def get_dataset_parser():
+    parser = argparse.ArgumentParser(description='Code for CanDLE implementation.')
+    parser.add_argument('--source',         type=str,   default="toil",         help="Data source to use",                                                                                                                                                                              choices=["toil", "wang","recount3"])
+    parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                                                                                                  choices=["both", "tcga", "gtex"])
+    parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data. Note that the choices for source wang are limited by the available classes.",                                                                                                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
+    parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multi-class problem, if other string solves a binary problem with this as the positive class. Note that the choices for source wang are limited by the available classes.",     choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
+    parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression strictly greater.")
+    parser.add_argument('--std_thr',        type=float, default=0.01,           help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std strictly greater.")
+    parser.add_argument('--rand_frac',      type=float, default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
+    parser.add_argument('--sample_frac',    type=float, default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
+    parser.add_argument('--gene_list_csv',  type=str,   default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
+    parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                                                                                                          choices=["None", "normal", "healthy_tcga"])
+    parser.add_argument('--fold_number',    type=int,   default=5,              help="The number of folds to use in stratified k-fold cross-validation. Minimum 2. In general more than 5 can cause errors.")
+    parser.add_argument('--seed',           type=int,   default=0,              help="Partition seed to divide tha data. Default is 0.")
+
+    return parser
 
 
 def train(train_loader, model, device, criterion, optimizer):
@@ -128,6 +144,7 @@ def test(loader, model, device, num_classes=34):
         metric_result["pr_curve"] = precision, recall, thresholds
         # Compute max F1 score
         metric_result["max_f1"] = np.nanmax(2 * (precision * recall) / (precision + recall))
+        metric_result['pr_df'] = pd.DataFrame({'lab_num': glob_true, 'positive_prob': glob_prob[:, 1]})
     else:
         binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
     
@@ -165,9 +182,9 @@ def print_both(p_string, f):
     print(p_string)
     # f.write(p_string)
     # f.write('\n')
+    # print('\n', file=f)
     print(p_string, file=f)
-    print('\n', file=f)
-
+    
 
 def print_epoch(train_dict, test_dict, loss, epoch, fold, path):
     """
@@ -187,7 +204,7 @@ def print_epoch(train_dict, test_dict, loss, epoch, fold, path):
     # Construction of the metrics table
     for k in train_dict.keys():
         # Handle metrics that cannot be printed
-        if (k == 'conf_matrix') or (k == 'AP_list') or (k == 'epoch') or (k == 'pr_curve') or (k == 'correct_prob_df'):
+        if (k == 'conf_matrix') or (k == 'AP_list') or (k == 'epoch') or (k == 'pr_curve') or (k == 'correct_prob_df') or (k == 'pr_df'):
             continue
         headers.append(k)
 
@@ -210,11 +227,11 @@ def print_epoch(train_dict, test_dict, loss, epoch, fold, path):
         print_both(data_frame, f)
         print_both('\n', f)
     
-
+# TODO: Join this function with get_final_performance_df() 
 def print_final_performance(fold_performance, path):
 
     # Declare the invalid metrics for not considering them
-    invalid_metrics = ['conf_matrix', 'AP_list', 'epoch', 'pr_curve', 'correct_prob_df']
+    invalid_metrics = ['conf_matrix', 'AP_list', 'epoch', 'pr_curve', 'correct_prob_df', 'pr_df']
     # Obtain a list of the metric dicts for test in the last epoch
     final_test_list = [fold_performance[fold]['test'][-1] for fold in fold_performance.keys()]
     # Obtain a list of the valid metrics
@@ -252,6 +269,39 @@ def print_final_performance(fold_performance, path):
         print_both('\n', f)
         print_both(f'General results at epoch {final_epoch}:', f)
         print_both(print_df, f)
+
+def get_final_performance_df(fold_performance):
+    # Declare the invalid metrics for not considering them
+    invalid_metrics = ['conf_matrix', 'AP_list', 'epoch', 'pr_curve', 'correct_prob_df', 'pr_df']
+    # Obtain a list of the metric dicts for test in the last epoch
+    final_test_list = [fold_performance[fold]['test'][-1] for fold in fold_performance.keys()]
+    # Obtain a list of the valid metrics
+    valid_metrics = [metric for metric in final_test_list[0].keys() if not(metric in invalid_metrics)]
+    # Declare empty metric matrix. It has first all the folds data and then the mean and std
+    metric_matrix = np.zeros((len(final_test_list), len(valid_metrics)))
+
+    # Assign data of each fold
+    for i in range(len(final_test_list)):
+        for j in range(len(valid_metrics)):
+            metric_matrix[i,j] = final_test_list[i][valid_metrics[j]]
+    
+    # Get a matrix of various statistics of the folds
+    statistic_matrix = np.vstack((  np.ndarray.min(metric_matrix, axis=0, keepdims=True),
+                                    np.ndarray.max(metric_matrix, axis=0, keepdims=True),
+                                    np.mean(metric_matrix, axis=0, keepdims=True),
+                                    np.std(metric_matrix, axis=0, keepdims=True)))
+    
+    # Obtain index and matrix for print data frame
+    index = [f'Fold {i+1}' for i in range(len(final_test_list))]
+    index.extend(['Min', 'Max', 'Mean', 'Std'])
+
+    metric_stats_matrix = np.vstack((metric_matrix, statistic_matrix))
+    
+    # Define printing dataframe
+    performance_df = pd.DataFrame(metric_stats_matrix, index=index, columns=valid_metrics)
+    performance_df.index.name = 'Measure'
+
+    return performance_df
   
 
 def get_paths(exp_name):
@@ -410,6 +460,7 @@ def plot_conf_matrix(fold_performance, lab_txt_2_lab_num, save_path):
     plt.savefig(save_path + "_r.png", dpi=200)
     plt.close()
 
+
 def plot_confidence_violin(fold_performance, lab_txt_2_lab_num, save_path):
     
     # Get a list of all the correct probabilities dataframes
@@ -447,14 +498,19 @@ def plot_confidence_violin(fold_performance, lab_txt_2_lab_num, save_path):
     cbar = plt.colorbar(m, ax=ax, label='Number of Samples', aspect= 20, pad=0.02)
     cbar.ax.tick_params(labelsize=15)
     ax = cbar.ax
-    fig.set_size_inches((15, 7))
+    fig.set_size_inches((20, 7))
     fig.tight_layout()
     fig.savefig(save_path, dpi=300)
 
 
-def plot_pr_curve(pr_curve_train, pr_curve_val, save_path):
-    precision = {'train': pr_curve_train[0], 'val': pr_curve_val[0]}
-    recall = {'train': pr_curve_train[1], 'val': pr_curve_val[1]}
+def plot_pr_curve(fold_performance, save_path):
+
+    # Get a list of all the precision recall dataframes
+    pr_df_list = [fold_performance[fold]['test'][-1]['pr_df'] for fold in fold_performance.keys()]
+    # Concatenate all folds in a global dataframe
+    global_confidence_df = pd.concat(pr_df_list, ignore_index=True)
+
+    precision, recall, thresholds = sklearn.metrics.precision_recall_curve(global_confidence_df['lab_num'], global_confidence_df['positive_prob'])
 
     plt.figure(figsize=(11, 10))
 
@@ -463,16 +519,14 @@ def plot_pr_curve(pr_curve_train, pr_curve_val, save_path):
         x = np.linspace(0.01, 1.01, 499)
         y = f_score * x / (2 * x - f_score)
         (l,) = plt.plot(x[y >= 0], y[y >= 0], color="gray", alpha=0.2)
-        plt.annotate("$F_1={0:0.1f}$".format(f_score), xy=(0.9, y[450] + 0.02))
+        plt.annotate("$F_1={0:0.1f}$".format(f_score), xy=(0.9, y[450] + 0.02), fontsize=12)
 
-    plt.plot(recall['train'], precision['train'], color='darkorange', lw=2, label='Train')
-    plt.plot(recall['val'], precision['val'], color='navy', lw=2, label='Val')
+    plt.plot(recall, precision, color='k', lw=2)
     plt.xlabel('Recall', fontsize=24)
     plt.ylabel('Precision', fontsize=24)
     plt.ylim([0.0, 1.01])
     plt.xlim([0.0, 1.01])
     plt.title('Precision-Recall Curve', fontsize=28)
-    plt.legend(fontsize=18)
     plt.grid()
     plt.tight_layout()
     plt.tick_params(labelsize=15)

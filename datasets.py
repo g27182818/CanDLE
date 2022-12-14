@@ -572,7 +572,6 @@ class gtex_tcga_dataset():
         plot_dim_reduction(reduced_dict, meta_df, color_type='class', cmap='brg')
 
 
-
 # Reading functions for all datasets
 def read_toil(path, force_compute):
         """
@@ -933,7 +932,7 @@ class Recount3Dataset(gtex_tcga_dataset):
 
 #         # Make mapper files if they are not already saved
 #         self.make_mappers()
-#         # Read data from the Toil data set # TODO: Interchange categories and phenotypes and only leave categories (unify dataset class)
+#         # Read data from the Toil data set 
 #         self.matrix_data, self.categories, self.phenotypes = self.read_data()
 #         # Filter toil datasets to use GTEx, TCGA or both. This part also takes out TARGET data
 #         self.matrix_data_filtered, self.categories_filtered, self.phenotypes_filtered = self.filter_datasets()

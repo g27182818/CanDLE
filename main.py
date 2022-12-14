@@ -1,9 +1,9 @@
 # Import of needed packages
-from random import sample
 import numpy as np
 import os
 import torch
 import pickle
+import argparse
 # Import auxiliary functions
 from utils import *
 from model import *
@@ -16,26 +16,12 @@ import matplotlib.pyplot as plt
 # Set axis bellow for matplotlib
 plt.rcParams['axes.axisbelow'] = True
 
-################ Parser code ###########################
-# Import the library
-import argparse
-# Create the parser
-parser = argparse.ArgumentParser()
-# Add an argument
-parser.add_argument('--source',         type=str,   default="toil",         help="Data source to use",                                                                                                                                                                              choices=["toil", "wang","recount3"])
-parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                                                                                                  choices=["both", "tcga", "gtex"])
-parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data. Note that the choices for source wang are limited by the available classes.",                                                                                                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
-parser.add_argument('--all_vs_one',     type=str,   default='False',        help="If False solves a multi-class problem, if other string solves a binary problem with this as the positive class. Note that the choices for source wang are limited by the available classes.",     choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
-parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression strictly greater.")
-parser.add_argument('--std_thr',        type=float, default=0.01,           help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std strictly greater.")
-parser.add_argument('--rand_frac',      type=float, default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
-parser.add_argument('--sample_frac',    type=float, default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
-parser.add_argument('--gene_list_csv',  type=str,   default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
-parser.add_argument('--batch_norm',     type=str,   default="normal",       help="Normalization to perform in each subset of the dataset",                                                                                                                                          choices=["None", "normal", "healthy_tcga"])
-parser.add_argument('--fold_number',    type=int,   default=5,              help="The number of folds to use in stratified k-fold cross-validation. Minimum 2. In general more than 5 can cause errors.")
-parser.add_argument('--seed',           type=int,   default=0,              help="Partition seed to divide tha data. Default is 0.")
 
 
+# Get Parser
+parser = get_dataset_parser()
+
+# Add arguments for model training
 parser.add_argument('--lr',             type=float, default=0.00001,        help="Learning rate")
 parser.add_argument('--weights',        type=str,   default='True',         help="Wether to train CanDLE with weighted cross entropy",                                                                   choices=['True', 'False'])
 parser.add_argument('--batch_size',     type=int,   default=100,            help="Batch size")
@@ -44,7 +30,7 @@ parser.add_argument('--mode',           type=str,   default="train",        help
 parser.add_argument('--exp_name',       type=str,   default='misc_test',    help="Experiment name to save")
 # Parse the argument
 args = parser.parse_args()
-#############################################################
+
 
 
 # Miscellaneous parameters --------------------------------------------------------------------------------------------#
@@ -184,19 +170,20 @@ if (args.mode == "train") or (args.mode == 'both'):
     # Generate training performance plot and save it to train_performance_fig_path
     plot_training(fold_performance, path_dict['train_fig'])
 
-    # Plot PR curve if the problem is binary
-    # FIXME: Solve PR plotting with multiple folds
-    if dataset.num_classes == 2:
-        plot_pr_curve(train_metrics["pr_curve"], test_metrics["pr_curve"], path_dict['pr_fig'])
-                      
     # Generate confusion matrices plot and save it to conf_matrix_fig_path
     plot_conf_matrix(fold_performance, dataset.lab_txt_2_lab_num, path_dict['conf_matrix_fig'])
 
-    # TODO: Add a way to print the generalized performance over folds
+    # Add a way to print the generalized performance over folds
     print_final_performance(fold_performance, path_dict['train_log'])
 
-    # TODO: Make decision confidence plot with the score probabilities
-    plot_confidence_violin(fold_performance, dataset.lab_txt_2_lab_num, path_dict['violin_conf_fig'])
+    
+    # Plot PR curve if the problem is binary
+    if dataset.num_classes == 2:
+        plot_pr_curve(fold_performance, path_dict['pr_fig'])
+    else:
+        # If not, make decision confidence plot with the score probabilities
+        plot_confidence_violin(fold_performance, dataset.lab_txt_2_lab_num, path_dict['violin_conf_fig'])          
+    
 
 # TODO: Solve tha interpretation protocol now that we have k-folds
 # TODO: Handle the loading of the best model or the last model. Right now it only tests if there is a fixed number of epochs                        
