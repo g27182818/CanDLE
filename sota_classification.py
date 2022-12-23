@@ -36,7 +36,7 @@ args = parser.parse_args()
 #----------------------------------------------------------------------------------------------------------------------#
 
 # Miscellaneous parameters --------------------------------------------------------------------------------------------#
-gpu = '3'                           # GPU to train                                                                     #
+gpu = '2'                           # GPU to train                                                                     #
 torch.manual_seed(12345)            # Set torch manual seed                                                            #
 device = torch.device("cuda")       # Set cuda device                                                                  #
 # ---------------------------------------------------------------------------------------------------------------------#
@@ -45,7 +45,14 @@ device = torch.device("cuda")       # Set cuda device                           
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
 # Handle the possibility of an all vs one binary problem
-complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
+complete_label_list = [ 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER',
+                        'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER',
+                        'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO',
+                        'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL',
+                        'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML',
+                        'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD',
+                        'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS',
+                        'TCGA-UVM']
 if args.all_vs_one=='False':
     binary_dict = {}
 else:
@@ -62,7 +69,6 @@ dataset = ToilDataset(os.path.join("data", "toil_data"),
                             rand_frac = args.rand_frac,
                             sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,
-                            label_type = 'phenotype',
                             batch_normalization = args.batch_norm,
                             partition_seed = 0,
                             force_compute = False)
@@ -79,7 +85,7 @@ lab_txt_2_tissue['GTEX-SAL_GLA'] = 'Salivary gland'
 lab_txt_2_tissue['GTEX-SMA_INT'] = 'Small intestine'
 lab_txt_2_tissue['GTEX-SPL'] = 'Spleen'
 lab_txt_2_tissue['GTEX-VAG'] = 'Vagina'
-lab_txt_2_tissue['TCGA-DLBC'] = 'Linphatic'
+lab_txt_2_tissue['TCGA-DLBC'] = 'Lymphatic'
 lab_txt_2_tissue['TCGA-HNSC'] = 'Mucosal Epithelium'
 lab_txt_2_tissue['TCGA-THYM'] = 'Thymus'
 lab_txt_2_tissue['TCGA-UVM'] = 'Uvea'
@@ -131,6 +137,8 @@ for lab in lab_txt_2_tissue.keys():
     hong_2_toil_annot[(cancer, tissue, subtype)] = dataset.lab_txt_2_lab_num[lab]
     toil_2_hong_annot[dataset.lab_txt_2_lab_num[lab]] = (cancer, tissue, subtype)
 
+# Until here all the code works ##################################################
+
 # Obtain dataset annotations in hong format
 hong_annotations = {key: pd.DataFrame(dataset.split_labels[key].map(toil_2_hong_annot)) for key in dataset.split_labels.keys()}
 hong_annotations['train']['cancer'], hong_annotations['train']['tissue'], hong_annotations['train']['subtype'] = zip(*hong_annotations['train'].lab_num)
@@ -163,6 +171,7 @@ if args.pca=='True':
     print('Started computing PCA, this may take a few minutes...')
     pca.fit(joint_matrix)
     print('PCA computed. Working with the first 2000 components...')
+    # FIXME: This pca transformation is incorrect
     joint_matrix = pd.DataFrame(pca.components_, columns=joint_matrix.columns)
     dataset.split_matrices['train'] = joint_matrix[dataset.split_matrices['train'].columns]
     dataset.split_matrices['val'] = joint_matrix[dataset.split_matrices['val'].columns]
@@ -371,7 +380,7 @@ _, _, test_cancer_pred, test_tissue_pred = test_multitask(test_dataloader, hong_
 _, val_subtype_pred = test_subtask(subtype_val_dataloader, hong_subtype_model, device)
 _, test_subtype_pred = test_subtask(subtype_test_dataloader, hong_subtype_model, device)
 
-# Handle subtype predictions to match the size of the ocmplete sets
+# Handle subtype predictions to match the size of the complete sets
 val_complete_subtype = -1*np.ones_like(val_cancer_pred)
 test_complete_subtype = -1*np.ones_like(test_cancer_pred)
 val_complete_subtype[subtype_val_data.valid_indexes] = val_subtype_pred

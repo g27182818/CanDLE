@@ -390,6 +390,128 @@ class gtex_tcga_dataset():
         # Return split dictionary
         return split_dict
 
+    # This function augments the self.label_df dataframe with textual and numeric hong annotations.
+    # The function returns a dictionary that goes from standard numeric annotations to hong tuple annotations
+    # and other dictionary that goes from hong tuple annotations (numeric) to standard int annotations. 
+    def compute_hong_annotations(self):
+        # FIXME: Make sure that the mapper file is available in each source
+        # Read lab_txt_2_tissue mapper
+        with open(os.path.join(self.path, "mappers", "id_2_tissue_mapper.json"), "r") as f:
+            lab_txt_2_tissue = json.load(f)
+        
+        # Define some extra lab_2_tissue entries
+        extra_entries = {   'GTEX-FAL_TUB': 'Fallopian tube',
+                            'GTEX-HEA':     'Heart',
+                            'GTEX-NER':     'Nerve',
+                            'GTEX-SAL_GLA': 'Salivary gland',
+                            'GTEX-SMA_INT': 'Small intestine',
+                            'GTEX-SPL':     'Spleen',
+                            'GTEX-VAG':     'Vagina',
+                            'TCGA-DLBC':    'Lymphatic',
+                            'TCGA-HNSC':    'Mucosal Epithelium',
+                            'TCGA-THYM':    'Thymus',
+                            'TCGA-UVM':     'Uvea'}
+
+        # Update lab_txt_2_tissue with extra entries
+        lab_txt_2_tissue.update(extra_entries)
+
+        # get reversed tissue_2_lab_txt_tcga dictionary just for tcga labels.
+        # If there are multiple lab_txt for a tissue then they are stored in a list 
+        tissue_2_lab_txt_tcga = {}
+        for key, value in lab_txt_2_tissue.items():
+            if 'TCGA' in key:
+                tissue_2_lab_txt_tcga.setdefault(value, []).append(key)
+
+        # Make dictionary that maps every lab_txt to a subtype. If there is only one cancer
+        # type for a given tissue then 'No Subtype' is assigned
+        lab_txt_2_subtype = {}
+        for lab, tissue in lab_txt_2_tissue.items():
+            if ('TCGA' in lab) and (len(tissue_2_lab_txt_tcga[tissue])>1):
+                lab_txt_2_subtype[lab] = lab
+            else:
+                lab_txt_2_subtype[lab] = 'No Subtype'
+
+        # Add textual (cancer, tissue and subtype) labels to self.label_df
+        self.label_df['hong_cancer'] = self.label_df['lab_txt'].str.contains('TCGA')
+        self.label_df['hong_tissue'] = self.label_df['lab_txt'].map(lab_txt_2_tissue)
+        self.label_df['hong_subtype'] = self.label_df['lab_txt'].map(lab_txt_2_subtype)
+
+        # Get sorted lists of the present textual tissues and subtypes
+        sorted_tissues = sorted(self.label_df['hong_tissue'].unique())
+        sorted_subtypes = sorted(self.label_df['hong_subtype'].unique())
+        sorted_subtypes.remove('No Subtype') # Remove No subtype to add it later with a -1 numeric label 
+        
+        # Compute numeric dictionaries of each textual hong annotation
+        cancer_2_num = {True:1, False:0}
+        tissue_2_num = {key:num for num, key in enumerate(sorted_tissues)}
+        subtype_2_num = {key:num for num, key in enumerate(sorted_subtypes)}
+        subtype_2_num['No Subtype'] = -1 # Important: -1 means that there is no subtype for that sample
+
+        # Get a hong annotation list of tuples
+        hong_annot = list(zip(  self.label_df['hong_cancer'].map(cancer_2_num),
+                                self.label_df['hong_tissue'].map(tissue_2_num),
+                                self.label_df['hong_subtype'].map(subtype_2_num)))
+        
+        self.label_df['hong_annot'] = hong_annot # Assign hong annotation column
+
+        # Get dictionaries from standard to hong annotations and viceversa
+        standard_2_hong_annot = dict(zip(self.label_df['lab_num'], self.label_df['hong_annot']))
+        hong_2_standard_annot = {val: key for key, val in standard_2_hong_annot.items()}
+
+        return standard_2_hong_annot, hong_2_standard_annot
+
+    # pca=-1 to not use pca.
+    # TODO: Write a good documentation
+    def get_hong_dataloaders(self, batch_size_multitask, batch_size_subtype, pca=2000, fold=0):
+
+        # Get train and test indexes depending on the fold number
+        train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
+
+        # Declare the processed data
+        processed_data = self.gene_filtered_data_matrix.T.values
+
+        # If a pca int bigger than 0 i specified then transform the original data
+        if pca>0:
+            print('Reducing dimensions with PCA may take approx 3 minutes...')
+            pca_reductor = PCA(n_components=pca, random_state=0)
+            processed_data = pca_reductor.fit_transform(processed_data)
+        else:
+            pass
+
+        # Compute hong annotations and get the train and test ground truths
+        standard_2_hong_annot, hong_2_standard_annot = self.compute_hong_annotations()
+        global_gt = np.array([*self.label_df['hong_annot'].values])
+        train_gt, test_gt = global_gt[train_index, :], global_gt[test_index, :]
+
+        # Get train and test matrix
+        train_matrix, test_matrix = processed_data[train_index, :], processed_data[test_index, :]
+        
+        # Cast labels as tensors
+        y_train = torch.Tensor(train_gt).type(torch.long)
+        y_test = torch.Tensor(test_gt).type(torch.long)
+
+        # Pass matrices to tensors. samples in rows and genes in columns
+        x_train = torch.Tensor(train_matrix).type(torch.float)
+        x_test = torch.Tensor(test_matrix).type(torch.float)
+
+        # Define train, val and test datasets
+        train_dataset = TensorDataset(x_train, y_train)
+        test_dataset = TensorDataset(x_test, y_test)
+
+        # Create dataloaders. Separated for multitask and subtype  
+        train_loader_multitask = DataLoader(train_dataset, batch_size=batch_size_multitask, shuffle=True)
+        test_loader_multitask = DataLoader(test_dataset, batch_size=batch_size_multitask, shuffle=True)
+        
+        train_loader_subtype = DataLoader(train_dataset, batch_size=batch_size_subtype, shuffle=True)
+        test_loader_subtype = DataLoader(test_dataset, batch_size=batch_size_subtype, shuffle=True)
+
+        # Create return dict for all dataloaders and annotation dictionaries
+        return_dict = { 'multitask': (train_loader_multitask, test_loader_multitask),
+                        'subtype':   (train_loader_subtype, test_loader_subtype),
+                        'annot':     (standard_2_hong_annot, hong_2_standard_annot)}
+        return return_dict
+
+
     # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
     def plot_filtering_histograms(self, filtering_info_df):        
         # Make a figure
@@ -889,16 +1011,21 @@ class Recount3Dataset(gtex_tcga_dataset):
 
 # Dataset tests
 
-# test_toil =     ToilDataset(os.path.join("data", "toil_data"),          batch_normalization='normal', dataset='both', force_compute=False)
-# test_wang =     WangDataset(os.path.join('data', 'wang_data'),          batch_normalization='normal', dataset='both', force_compute=False)
-# test_recount3 = Recount3Dataset(os.path.join('data', 'recount3_data'),  batch_normalization='normal', dataset='both', force_compute=False)
+# test_toil =     ToilDataset(os.path.join("data", "toil_data"),          batch_normalization='normal', dataset='both', force_compute=False, sample_frac=0.5)
+# test_wang =     WangDataset(os.path.join('data', 'wang_data'),          batch_normalization='normal', dataset='both', force_compute=False, sample_frac=0.99)
+# test_recount3 = Recount3Dataset(os.path.join('data', 'recount3_data'),  batch_normalization='normal', dataset='both', force_compute=False, sample_frac=0.99)
 
-# Loader tests
+# Standard Loader tests
 
 # train_loader_toil, test_loader_toil = test_toil.get_dataloaders(batch_size = 100, fold = 0)
 # train_loader_wang, test_loader_wang = test_wang.get_dataloaders(batch_size = 100, fold = 0)
 # train_loader_recount3, test_loader_recount3 = test_recount3.get_dataloaders(batch_size = 100, fold = 0)
 
+# Hong Loader tests
+
+# hong_toil_dict =          test_toil.get_hong_dataloaders(batch_size_multitask=453,        batch_size_subtype=421, pca=2000, fold=0)
+# hong_wang_dict =          test_wang.get_hong_dataloaders(batch_size_multitask=453,        batch_size_subtype=421, pca=2000, fold=0)
+# hong_recount3_dict =      test_recount3.get_hong_dataloaders(batch_size_multitask=453,    batch_size_subtype=421, pca=2000, fold=0)
 
 ##############################################################################################################################################
 

@@ -77,8 +77,7 @@ if args.mode == 'compute':
 
 
 # Plot results
-# if args.mode == 'plot' or args.mode == 'compute':
-if args.mode == 'plot':
+if args.mode == 'plot' or args.mode == 'compute':
 
     # Get results in validation ##########################################################################
     metric_paths = [os.path.join('results', exp_name, 'metric_dicts.pickle') for exp_name in exp_names]
