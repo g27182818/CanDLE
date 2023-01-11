@@ -11,7 +11,7 @@ class MLP(torch.nn.Module):
         connectivity information or any other. It uses raw input.
         :param h_sizes: (list) List of sizes of the hidden layers. Does not include the output size.
         :param out_size: (int) Number of output classes.
-        :param act: (str) Paramter to specify the activation function. Can be "relu", "sigmoid" or "gelu". Default
+        :param act: (str) Parameter to specify the activation function. Can be "relu", "sigmoid" or "gelu". Default
                     "relu" (Default = "relu").
         """
         super(MLP, self).__init__()
@@ -42,7 +42,7 @@ class MLP(torch.nn.Module):
             elif self.activation == "sigmoid":
                 x = F.sigmoid(layer(x))
             else:
-                raise NotImplementedError("Activation function not impemented")
+                raise NotImplementedError("Activation function not implemented")
 
         # Output layer. This is the only one used in multinomial logistic regression
         output = self.out(x)

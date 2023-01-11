@@ -1,7 +1,7 @@
 library("UCSCXenaTools")
 library("feather")
 
-# Print Masage to the user
+# Print Massage to the user
 cat("Starting download of the data\nThis should take approximately 10 minutes...\n\n\n\n")
 # Make pause for 10 seconds to let the user read the message
 Sys.sleep(10)

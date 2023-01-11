@@ -11,7 +11,6 @@ import zipfile
 import gzip
 import shutil
 import pylab
-import matplotlib
 import matplotlib.patches as mpatches
 from matplotlib.cm import get_cmap, ScalarMappable
 from matplotlib.colors import LinearSegmentedColormap
@@ -394,7 +393,6 @@ class gtex_tcga_dataset():
     # The function returns a dictionary that goes from standard numeric annotations to hong tuple annotations
     # and other dictionary that goes from hong tuple annotations (numeric) to standard int annotations. 
     def compute_hong_annotations(self):
-        # FIXME: Make sure that the mapper file is available in each source
         # Read lab_txt_2_tissue mapper
         with open(os.path.join(self.path, "mappers", "id_2_tissue_mapper.json"), "r") as f:
             lab_txt_2_tissue = json.load(f)
@@ -498,17 +496,35 @@ class gtex_tcga_dataset():
         train_dataset = TensorDataset(x_train, y_train)
         test_dataset = TensorDataset(x_test, y_test)
 
+        # Find indexes of data that have a subtype
+        valid_subtype_train_indexes = y_train[:,2] != -1 
+        valid_subtype_test_indexes = y_test[:,2] != -1
+
+        # Get x_train/test for samples with subtype
+        valid_subtype_x_train = x_train[valid_subtype_train_indexes, :]
+        valid_subtype_x_test = x_test[valid_subtype_test_indexes, :]
+
+        # Get y_train/test for samples with subtype
+        valid_subtype_y_train = y_train[valid_subtype_train_indexes, :]
+        valid_subtype_y_test = y_test[valid_subtype_test_indexes, :]
+
+        # Declare subtype datasets with only samples that have subtypes
+        train_subtype_dataset = TensorDataset(valid_subtype_x_train, valid_subtype_y_train) 
+        test_subtype_dataset = TensorDataset(valid_subtype_x_test, valid_subtype_y_test) 
+
         # Create dataloaders. Separated for multitask and subtype  
         train_loader_multitask = DataLoader(train_dataset, batch_size=batch_size_multitask, shuffle=True)
-        test_loader_multitask = DataLoader(test_dataset, batch_size=batch_size_multitask, shuffle=True)
+        test_loader_multitask = DataLoader(test_dataset, batch_size=batch_size_multitask, shuffle=False) # Shuffle in test is unnecessary
         
-        train_loader_subtype = DataLoader(train_dataset, batch_size=batch_size_subtype, shuffle=True)
-        test_loader_subtype = DataLoader(test_dataset, batch_size=batch_size_subtype, shuffle=True)
+        train_loader_subtype = DataLoader(train_subtype_dataset, batch_size=batch_size_subtype, shuffle=True)
+        test_loader_subtype = DataLoader(test_subtype_dataset, batch_size=batch_size_subtype, shuffle=False) # Shuffle in test is unnecessary
 
         # Create return dict for all dataloaders and annotation dictionaries
-        return_dict = { 'multitask': (train_loader_multitask, test_loader_multitask),
-                        'subtype':   (train_loader_subtype, test_loader_subtype),
-                        'annot':     (standard_2_hong_annot, hong_2_standard_annot)}
+        return_dict = { 'multitask':        (train_loader_multitask, test_loader_multitask),
+                        'subtype':          (train_loader_subtype, test_loader_subtype),
+                        'annot':            (standard_2_hong_annot, hong_2_standard_annot),
+                        'valid_index':      (valid_subtype_train_indexes, valid_subtype_test_indexes),
+                        'test_standard_gt': self.label_df['lab_num'].values[test_index]}    
         return return_dict
 
 
@@ -1539,7 +1555,7 @@ class Recount3Dataset(gtex_tcga_dataset):
     
 #     # This function plots the label distribution of the dataset
 #     def plot_label_distribution(self):
-#         # Reverse salf.lab_txt_2_lab_num dictionary
+#         # Reverse self.lab_txt_2_lab_num dictionary
 #         lab_num_2_lab_txt = {v: k for k, v in self.lab_txt_2_lab_num.items()}
 
 #         # Get label distribution

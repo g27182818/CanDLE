@@ -217,7 +217,7 @@ id_2_tissue_mapper = {  'GTEX-ADI':             'Connective', # Model for connec
                         'TCGA-CESC':            'Cervix',
                         'TCGA-CHOL':            'Liver',
                         'TCGA-COAD':            'Colon',
-                        'TCGA-DLBC':            'Not Paired', # Difuse large B-cell lymphoma is from the linphatic system but assigned to blood
+                        'TCGA-DLBC':            'Not Paired', # Diffuse large B-cell lymphoma is from the lymphatic system but assigned to blood
                         'TCGA-ESCA':            'Esophagus',
                         'TCGA-GBM':             'Brain',
                         'TCGA-HNSC':            'Not Paired', # Head and neck squamous cell carcinoma
@@ -383,7 +383,7 @@ os.makedirs(os.path.join("data", "wang_data", "mappers"), exist_ok=True)
 os.makedirs(os.path.join("data", "recount3_data", "mappers"), exist_ok=True)
 
 
-# FIXME: The names of the files should be much more standar
+# FIXME: The names of the files should be much more standard
 
 # Save normal_tcga_mapper mappers to file
 with open(os.path.join("data", "toil_data", "mappers", "normal_tcga_2_gtex_mapper.json"), 'w') as f:

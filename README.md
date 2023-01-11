@@ -1,6 +1,6 @@
 # CanDLE
 
-Source code for the "CanDLE: Illuminating Biases in Transcriptomic Pan-Cancer Diagnosis" paper presented in the 1st Workshop on Computational Mathematics Modeling in Cancer Analysis ([CMMCA2022](https://cmmca2022.casconf.cn/)) held at MICCAI 2022. You can consult the original video presentation in [this link](https://youtu.be/oL9W5Akdz7w). This is a research effort by the Biomedical Computer Vision gruop ([BCV](https://biomedicalcomputervision.uniandes.edu.co/)) of Universidad de los Andes authored by Gabriel Mejía, Natasha Bloch and Pablo Arbelaez.
+Source code for the "CanDLE: Illuminating Biases in Transcriptomic Pan-Cancer Diagnosis" paper presented in the 1st Workshop on Computational Mathematics Modeling in Cancer Analysis ([CMMCA2022](https://cmmca2022.casconf.cn/)) held at MICCAI 2022. You can consult the original video presentation in [this link](https://youtu.be/oL9W5Akdz7w). This is a research effort by the Biomedical Computer Vision group ([BCV](https://biomedicalcomputervision.uniandes.edu.co/)) of Universidad de los Andes authored by Gabriel Mejía, Natasha Bloch and Pablo Arbeláez.
 
 ## News
 

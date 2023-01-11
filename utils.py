@@ -42,7 +42,7 @@ def train(train_loader, model, device, criterion, optimizer):
     """
     This function performs 1 training epoch in a graph classification model with the possibility of adversarial
     training using the attach function.
-    :param train_loader: (torch.utils.data.DataLoader) Pytorch dataloader containing training data.
+    :param train_loader: (torch.utils.data.DataLoader) PyTorch dataloader containing training data.
     :param model: (torch.nn.Module) The prediction model.
     :param device: (torch.device) The CUDA or CPU device to parallelize.
     :param criterion: (torch.nn loss function) Loss function to optimize (For this task CrossEntropy is used).
@@ -84,7 +84,7 @@ def train(train_loader, model, device, criterion, optimizer):
 def test(loader, model, device, num_classes=34):
     """
     This function calculates a set of metrics using a model and its inputs.
-    :param loader: (torch.utils.data.DataLoader) Pytorch dataloader containing data to test.
+    :param loader: (torch.utils.data.DataLoader) PyTorch dataloader containing data to test.
     :param model: (torch.nn.Module) The prediction model.
     :param device: (torch.device) The CUDA or CPU device to parallelize.
     :param num_classes: (int) Number of classes of the classification problem (Default = 34).
@@ -167,6 +167,152 @@ def test(loader, model, device, num_classes=34):
 
     return metric_result
 
+# define train function multitask
+def train_hong_multitask(train_loader, model, device, cancer_criterion, tissue_criterion, optimizer):
+    # Put model in train mode
+    model.train()
+    # Start the mean loss value
+    mean_loss = 0
+    mean_cancer_loss = 0
+    mean_tissue_loss = 0
+    # Start a counter
+    count = 0
+    # Training cycle over the complete training batch
+    for data in train_loader:  # Iterate in batches over the training dataset.
+        input_cancer, input_tissue, input_subtype = data[1][:, 0].to(device), data[1][:, 1].to(device), data[1][:, 2].to(device)
+        # Get the inputs of the model (x) and the groundtruth
+        input_x = data[0].to(device)
+        out_cancer, out_tissue = model(input_x)  # Perform a single forward pass.
+        cancer_loss = cancer_criterion(out_cancer, input_cancer)  # Compute the cancer loss.
+        tissue_loss = tissue_criterion(out_tissue, input_tissue)  # Compute the tissue loss.
+        total_loss = cancer_loss + tissue_loss
+        total_loss.backward()  # Derive gradients.
+        optimizer.step()  # Update parameters based on gradients.
+        optimizer.zero_grad()  # Clear gradients.
+        mean_loss += total_loss
+        mean_cancer_loss += cancer_loss
+        mean_tissue_loss += tissue_loss
+        count += 1
+
+    mean_loss = mean_loss/count
+    mean_cancer_loss = mean_cancer_loss/count
+    mean_tissue_loss = mean_tissue_loss/count
+    return mean_loss, mean_cancer_loss, mean_tissue_loss
+
+# define train function subtask
+def train_hong_subtask(train_loader, model, device, subtype_criterion, optimizer):
+    # Put model in train mode
+    model.train()
+    # Start the mean loss value
+    mean_loss = 0
+    # Start a counter
+    count = 0
+    # Training cycle over the complete training batch
+    for data in train_loader:  # Iterate in batches over the training dataset.
+        input_cancer, input_tissue, input_subtype = data[1][:, 0].to(device), data[1][:, 1].to(device), data[1][:, 2].to(device)
+        # Get the inputs of the model (x) and the groundtruth
+        input_x = data[0].to(device)
+        out_subtype = model(input_x)                                    # Perform a single forward pass.
+        subtype_loss = subtype_criterion(out_subtype, input_subtype)    # Compute the subtype loss.
+        subtype_loss.backward()                                         # Derive gradients.
+        optimizer.step()                                                # Update parameters based on gradients.
+        optimizer.zero_grad()                                           # Clear gradients.
+        mean_loss += subtype_loss
+        count += 1
+
+    mean_loss = mean_loss/count
+    return mean_loss
+
+def test_hong_multitask(loader, model, device):
+    # Put model in evaluation mode
+    model.eval()
+
+    # Global true tensor
+    glob_true_cancer = np.array([])
+    glob_true_tissue = np.array([])
+    # Global probability tensor
+    glob_prob_cancer = np.array([])
+    glob_prob_tissue = np.array([])
+
+    # Computing loop
+    for data in loader:  # Iterate in batches over the training/test dataset.
+        input_cancer, input_tissue, input_subtype = data[1][:, 0], data[1][:, 1], data[1][:, 2]
+        # Get the inputs of the model (x) and the groundtruth
+        input_x = data[0].to(device)
+        out_cancer, out_tissue = model(input_x)  # Perform a single forward pass.
+        # Get probabilities
+        prob_cancer = out_cancer.softmax(dim=1).cpu().detach().numpy()
+        prob_tissue = out_tissue.softmax(dim=1).cpu().detach().numpy()
+        # Stack cases with previous ones
+        glob_prob_cancer = np.vstack([glob_prob_cancer, prob_cancer]) if glob_prob_cancer.size else prob_cancer
+        glob_prob_tissue = np.vstack([glob_prob_tissue, prob_tissue]) if glob_prob_tissue.size else prob_tissue
+        glob_true_cancer = np.hstack((glob_true_cancer, input_cancer)) if glob_true_cancer.size else input_cancer
+        glob_true_tissue = np.hstack((glob_true_tissue, input_tissue)) if glob_true_tissue.size else input_tissue
+
+    # Get predictions
+    pred_cancer = glob_prob_cancer.argmax(axis=1)
+    pred_tissue = glob_prob_tissue.argmax(axis=1)
+
+    cancer_macc = sklearn.metrics.balanced_accuracy_score(glob_true_cancer, pred_cancer)
+    tissue_macc = sklearn.metrics.balanced_accuracy_score(glob_true_tissue, pred_tissue)
+    
+    return cancer_macc, tissue_macc, pred_cancer, pred_tissue
+
+def test_hong_subtask(loader, model, device):
+    # Put model in evaluation mode
+    model.eval()
+
+    # Global true tensor
+    glob_true_subtype = np.array([])
+    # Global probability tensor
+    glob_prob_subtype = np.array([])
+
+    # Computing loop
+    for data in loader:  # Iterate in batches over the training/test dataset.
+        input_cancer, input_tissue, input_subtype = data[1][:, 0], data[1][:, 1], data[1][:, 2]
+        # Get the inputs of the model (x) and the groundtruth
+        input_x = data[0].to(device)
+        out_subtype = model(input_x)  # Perform a single forward pass.
+        # Get probabilities
+        prob_subtype = out_subtype.softmax(dim=1).cpu().detach().numpy()
+        # Stack cases with previous ones
+        glob_prob_subtype = np.vstack([glob_prob_subtype, prob_subtype]) if glob_prob_subtype.size else prob_subtype
+        glob_true_subtype = np.hstack((glob_true_subtype, input_subtype)) if glob_true_subtype.size else input_subtype
+
+    # Get predictions
+    pred_subtype = glob_prob_subtype.argmax(axis=1)
+    subtype_macc = sklearn.metrics.balanced_accuracy_score(glob_true_subtype, pred_subtype)
+    
+    return subtype_macc, pred_subtype
+
+
+def test_hong_with_standard_metrics(dataloader_dict, multitask_model, subtype_model, device):
+    
+    _, _, test_cancer_pred, test_tissue_pred = test_hong_multitask(dataloader_dict['multitask'][1], multitask_model, device)
+    _, test_subtype_pred = test_hong_subtask(dataloader_dict['subtype'][1], subtype_model, device)
+
+    # Handle subtype predictions to match the size of the complete sets
+    test_complete_subtype = -1*np.ones_like(test_cancer_pred)
+    test_complete_subtype[dataloader_dict['valid_index'][1]] = test_subtype_pred
+
+    # Join predictions
+    test_glob_pred = np.vstack([test_cancer_pred, test_tissue_pred, test_complete_subtype]).T
+
+    test_tuples = tuple(map(tuple, test_glob_pred))
+
+    # Get standard format predictions from hong format predictions
+    # IMPORTANT: A -1 indicates that the hong model produced a prediction that is not valid in the toil dataset
+    # This can be for example a cancer sample of lung tissue but from kidney kich subtype
+    hong_2_standard_annot = dataloader_dict['annot'][1]
+    test_standard_pred = [hong_2_standard_annot[tup] if tup in hong_2_standard_annot.keys() else -1 for tup in test_tuples]
+
+
+    test_standard_true = dataloader_dict['test_standard_gt']
+
+    macc_standard_test = sklearn.metrics.balanced_accuracy_score(test_standard_true, test_standard_pred)
+    acc_standard_test = sklearn.metrics.accuracy_score(test_standard_true, test_standard_pred)
+
+    return macc_standard_test, acc_standard_test
 
 def print_both(p_string, f):
     """
@@ -269,6 +415,7 @@ def print_final_performance(fold_performance, path):
         print_both('\n', f)
         print_both(f'General results at epoch {final_epoch}:', f)
         print_both(print_df, f)
+
 
 def get_final_performance_df(fold_performance):
     # Declare the invalid metrics for not considering them
@@ -532,3 +679,6 @@ def plot_pr_curve(fold_performance, save_path):
     plt.tick_params(labelsize=15)
     plt.savefig(save_path, dpi=200)
     plt.close()
+
+def tensor_2_numpy(tensor):
+    return tensor.cpu().detach().numpy()
