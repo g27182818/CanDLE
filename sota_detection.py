@@ -1,42 +1,43 @@
 # Import of needed packages
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import os
-import torch
 from sklearn.preprocessing import StandardScaler
 import sklearn
 from sklearn.decomposition import PCA
 import scipy
 import time
+from tqdm import tqdm
 # Import auxiliary functions
 from utils import *
 from model import *
 from datasets import *
 
-#---------------- Parser code -------------------------------------------------------------------------------------------#
-# Import the library
-import argparse
-# Create the parser
-parser = argparse.ArgumentParser()
-# Add an argument
-parser.add_argument('--dataset',        type=str,   default="both",         help="Dataset to use",                                                                                                  choices=["both", "tcga", "gtex"])
-parser.add_argument('--tissue',         type=str,   default="all",          help="Tissue to use from data",                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
-parser.add_argument('--batch_norm',     type=str,   default="normal",         help="Normalization to perform in each subset of the dataset",                                                          choices=["none", "normal", "healthy_tcga"])
-parser.add_argument('--mean_thr',       type=float, default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression strictly greater.")
-parser.add_argument('--std_thr',        type=float, default=0.0,            help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std strictly greater. Is is set to 0.1 by default to make fair comparison with CanDLE")
-parser.add_argument('--rand_frac',      type=float, default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
-parser.add_argument('--sample_frac',    type=float, default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
-parser.add_argument('--gene_list_csv',  type=str,   default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
+# Ignore a not necessary warning
+np.seterr(divide='ignore', invalid='ignore')
+
+# Get Parser
+parser = get_dataset_parser()
+
+# Add arguments for model training
+parser.add_argument('--exp_name',       type=str,   default='automatic',    help="Experiment name to save. If automatic is specified the name will be sota_detection/<<args.source>>/sample_frac_<<args.sample_frac>>")
 # Parse the argument
 args = parser.parse_args()
-#----------------------------------------------------------------------------------------------------------------------#
+args_dict = vars(args)
 
+# Set experiment name in case it is automatic
+if args.exp_name == 'automatic':
+    args.exp_name = os.path.join('sota_detection', f'{args.source}', f'sample_frac_{args.sample_frac}')
+# Create directory for results
+os.makedirs(os.path.join('results', args.exp_name), exist_ok=True)
 
-######################################################################
-#            You can safely change these parameters                  #
-######################################################################
-mode = 'test' # 'val', 'test'
-######################################################################
+# Print experiment parameters
+with open(os.path.join('results', args.exp_name, 'parser_logs.txt'), 'a') as f:
+    print_both('Argument list to program',f)
+    print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg])
+                    for arg in args_dict]),f)
+    print_both('\n\n',f)
 
 
 # Adaptation of code taken from Quinn et al repository DOI: 10.3389/fgene.2019.00599 ################################
@@ -58,11 +59,11 @@ def get_score_threshold(X_train, X_test):
     K = int(np.where(cs >= cs[-1] * keep_info)[0][0] + 1)
     U = U[:,:K]
     
-    print('Getting Residuals...')
+    # print('Getting Residuals...')
     start = time.time()
     residuals = get_residuals(X_test_nom, U)
     end = time.time()
-    print('Residuals computed in {:.3f} seconds'.format(end-start))
+    # print('Residuals computed in {:.3f} seconds'.format(end-start))
 
     c_beta = scipy.stats.norm.ppf(1 - beta)
     theta1 = sum(S[K+1:])
@@ -73,95 +74,116 @@ def get_score_threshold(X_train, X_test):
     
     return residuals, Qbeta
 
+# Empty binary dict will be used because detection annotations will be handled from inside this code
+binary_dict = {}
 
-# Handle the possibility of an all vs one binary problem
-complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
-tcga_label_list = [lab for lab in complete_label_list if 'TCGA' in lab]
+# A single dataset will be declared for each run and the binary detection annotations will be computed
+# from inside the code. This is for saving computation time. 
+# Declare dataset depending on the source
+if args.source == 'toil':
+    dataset = ToilDataset(  os.path.join('data', 'toil_data'),          dataset = args.dataset,
+                            tissue = args.tissue,                       binary_dict=binary_dict,
+                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
+                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
+                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
+                            fold_number = args.fold_number,             partition_seed = args.seed,
+                            force_compute = False)
 
-# Empty max f1 and AP arrays
-max_f1_list = np.array([])
-ap_list = np.array([])
+elif args.source == 'wang':
+    dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
+                            tissue = args.tissue,                       binary_dict=binary_dict,
+                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
+                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
+                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
+                            fold_number = args.fold_number,             partition_seed = args.seed,
+                            force_compute = False)
 
-for actual_label in tcga_label_list:
+elif args.source == 'recount3':
+    dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
+                            tissue = args.tissue,                       binary_dict=binary_dict,
+                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
+                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
+                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
+                            fold_number = args.fold_number,             partition_seed = args.seed,
+                            force_compute = False)
 
-    binary_dict = {label: 0 for label in complete_label_list}
-    binary_dict[actual_label] = 1
-
-    # Declare dataset
-    dataset = ToilDataset(os.path.join("data", "toil_data"),
-                                dataset = args.dataset,
-                                tissue = args.tissue,
-                                binary_dict=binary_dict,
-                                mean_thr = args.mean_thr,
-                                std_thr = args.std_thr,
-                                rand_frac = args.rand_frac,
-                                sample_frac=args.sample_frac,
-                                gene_list_csv = args.gene_list_csv,
-                                label_type = 'phenotype',
-                                batch_normalization=args.batch_norm,
-                                partition_seed = 0,
-                                force_compute = False)
-
-
-    keep_info = .1
-    beta = .999
-
-    # Get first version matrices
-    x_train = dataset.split_matrices['train']
-    y_train = dataset.split_labels['train']
-    x_val, x_test = dataset.split_matrices['val'], dataset.split_matrices['test']
-    y_val, y_test = dataset.split_labels['val'], dataset.split_labels['test']
-
-    # Filter training matrix to get just positive samples
-    x_train = dataset.split_matrices['train'].loc[:,(y_train==1).tolist()]
-    y_train = dataset.split_labels['train'][(y_train==1).tolist()]
-
-    x_train, x_val, x_test = x_train.T, x_val.T, x_test.T
-
-    # Get scores from model
-    anomal_score,threshold = get_score_threshold(x_train, x_val) if mode == 'val' else get_score_threshold(x_train, x_test)
-
-    # Get probabilities
-    anomal_prob = (anomal_score-anomal_score.min())/(anomal_score.max()-anomal_score.min()) 
-    anomal_prob =  1-anomal_prob
-
-    # Get and print metrics
-    precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_val, anomal_prob) if mode == 'val' else sklearn.metrics.precision_recall_curve(y_test, anomal_prob)
-    max_f1 = np.nanmax(2 * (precision * recall) / (precision + recall))
-    AP = sklearn.metrics.average_precision_score(y_val, anomal_prob) if mode == 'val' else sklearn.metrics.average_precision_score(y_test, anomal_prob)
-
-    print('-'*89)
-    print('Results for '+actual_label+' :')
-    print('max F1: {:.3f} | AP: {:.3f}'.format(max_f1,AP))
-    print('-'*89)
-
-    max_f1_list = np.hstack((max_f1_list, max_f1)) if max_f1_list.shape else max_f1
-    ap_list = np.hstack((ap_list, AP)) if ap_list.shape else AP
+# Obtain just TCGA labels
+tcga_label_list = [lab for lab in dataset.lab_txt_2_lab_num.keys() if 'TCGA' in lab]
+# Snippet to test the code with just two labels (comment in real use)
+# tcga_label_list = tcga_label_list[:2]
 
 
-    # Make separation plots 
-    data_idx = np.arange(len(y_val))
-    fig, ax = plt.subplots(figsize=(10, 10))
-    plt.scatter(data_idx, anomal_score,s=3,label='normal', color='blue')
-    plt.scatter(data_idx[y_val==1], anomal_score[y_val==1], color='red',s=3,label='tumor')
-    threshold_line = np.ones(len(y_val)) * threshold
-    plt.plot(data_idx, threshold_line, color='green')
-    plt.yscale('log')
-    plt.xlabel('Data point',fontsize=18)
-    plt.ylabel('Residual signal',fontsize=18)
-    plt.title(actual_label,fontsize=20)
-    plt.legend(fontsize=18)
-    plt.show()  
-    fig.tight_layout()
-    # Make directory to save separation plots
-    if not os.path.exists(os.path.join('Figures','sota_detection')):
-        os.makedirs(os.path.join('Figures','sota_detection'))
-    fig.savefig(os.path.join('Figures','sota_detection', actual_label + '.png'))
-    plt.close(fig)
+# Declare a global metrics dataframe that will contain all
+global_metrics_df = pd.DataFrame(columns = ['fold', 'label', 'max F1', 'AP'])
 
 
-print(f'Global {mode} results:')
-print('mean max F1: {:.3f} | mean AP: {:.3f}'.format(np.mean(max_f1_list),np.mean(ap_list)))
+# Cycle over folds
+for fold in tqdm(range(args.fold_number), position = 0, desc='Global progress'):
+    # Get numpy split for the given fold
+    split_dict = dataset.get_numpy_split(fold=fold)
+    # Get original annotations
+    train_orig_annot, test_orig_annot = split_dict['y']['train'], split_dict['y']['test']
+
+    # Cycle over all the cancer labels
+    for actual_label in tqdm(tcga_label_list, position = 1, leave=False, desc='Fold progress'):
+
+        # Get the numeric label the we want to detect in this experiment
+        num_label_to_detect = dataset.lab_txt_2_lab_num[actual_label]
+
+        # Modify the original fold annotations to get binary annotations for the cancer type that we want to detect
+        train_mod_annot = train_orig_annot == num_label_to_detect
+        test_mod_annot = test_orig_annot == num_label_to_detect
+
+        # Get first version data matrices
+        x_train = split_dict['x']['train']
+        x_test = split_dict['x']['test']
+        
+        # Filter training matrix to get just positive samples
+        x_train = x_train.loc[:,(train_mod_annot==True).tolist()]
+
+        # Transpose matrices to enter Quinn's method
+        # The training matrix just contains positive samples while the test matrix contains both positive and negative samples
+        x_train, x_test = x_train.T, x_test.T
+
+        # Parameters specific to Quinn et al code
+        keep_info = .1
+        beta = .999
+
+        # Get scores from model
+        anomal_score,threshold = get_score_threshold(x_train, x_test)
+
+        # Get probabilities (map scores to (0-1) according to the probability of not being a sample of the target cancer type)
+        anomal_prob = (anomal_score-anomal_score.min())/(anomal_score.max()-anomal_score.min()) 
+        # Invert probability to get the changes of being part of the desired cancer class
+        anomal_prob =  1-anomal_prob
+
+        # Get and print metrics
+        precision, recall, thresholds = sklearn.metrics.precision_recall_curve(test_mod_annot, anomal_prob)
+        max_f1 = np.nanmax(2 * (precision * recall) / (precision + recall))
+        AP = sklearn.metrics.average_precision_score(test_mod_annot, anomal_prob)
+
+        # Declare current metrics dataframe
+        curr_df = pd.DataFrame({'fold': [fold], 'label': [actual_label], 'max F1': [max_f1], 'AP': [AP]})
+        # Add curr_df to global metrics
+        global_metrics_df = pd.concat([global_metrics_df, curr_df], ignore_index=True)
+
+        # If it is the fist datum it starts the log
+        if global_metrics_df.shape[0] == 1:
+            global_metrics_df.to_csv(os.path.join('results', args.exp_name, f'metric_log.csv'))
+        # For the next data just append to the csv
+        else:
+            global_metrics_df.iloc[[-1], :].to_csv(os.path.join('results', args.exp_name, f'metric_log.csv'), mode='a', header=None)
 
 
+# Compute averages of all classes in each fold
+mean_results = global_metrics_df.groupby('fold').mean(numeric_only=True)
+# Obtain statistics that compare folds
+results_stats = mean_results.describe()
 
+# Print a final table with a summary of the results
+final_table = pd.concat([mean_results, results_stats.loc[['mean', 'std']]])
+final_table.columns = ['mean max F1', 'mAP']
+print(final_table)
+
+# Save to csv tha summary
+final_table.to_csv(os.path.join('results', args.exp_name, 'final_metrics.csv'))

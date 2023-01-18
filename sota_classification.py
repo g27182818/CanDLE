@@ -3,9 +3,7 @@ import numpy as np
 import pandas as pd
 import os
 import torch
-from tqdm import trange
-import json
-import sklearn
+from tqdm import tqdm
 # Import auxiliary functions
 from utils import *
 from model import *
@@ -101,7 +99,6 @@ for fold in range(args.fold_number):
     tissue_criterion = torch.nn.CrossEntropyLoss()
     subtype_criterion = torch.nn.CrossEntropyLoss()
 
-    # TODO: Know if this needs to be changed with the corrected PCA
     # Handle differences in learning rates when training with PCA
     if args.pca>0:
         lr_multitask, lr_subtype = 6.3e-4, 4.9e-4
