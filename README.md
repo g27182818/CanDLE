@@ -28,8 +28,9 @@ Create an `R` environment:
 ```bash
 conda create --name R
 conda activate R
-conda install -c r r-essentials # Can take some minutes
-conda install -c conda-forge r-base=4.1.0 # Can take some minutes
+conda install -c conda-forge r-essentials
+# conda install -c r r-essentials # Can take some minutes
+# conda install -c conda-forge r-base=4.1.0 # Can take some minutes
 conda install -c conda-forge r-languageserver
 ```
 
@@ -38,13 +39,13 @@ Open an R session in terminal to install all needed packages:
 ```R
 R # This should open an R session
 install.packages("rlang")
-install.packages("UCSCXenaTools") # Can take a few minutes
+install.packages("UCSCXenaTools")
 install.packages('feather')
 install.packages("pacman")
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("recount")  # May take several minutes
-BiocManager::install("recount3") # May take several minutes
+BiocManager::install("recount3")
 quit() # This will end the R session you don't need to save workspace (n)
 ```
 
@@ -84,6 +85,14 @@ Note:
 * There can be problems downloading the `TcgaTargetGtex_rsem_gene_tpm.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/data_matrix.feather` file should have a size of 8.62 Gb. If it does not have this size, it is recommended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
 * There can be problems downloading the `TcgaTargetGtex_gene_expected_count.gz` file due to poor internet connection or server problems. When downloaded the final `data/toil_data/count_matrix.feather` file should have a size of 8.61 Gb. If it does not have this size, it is recommended to download the file directly from [this link](https://toil.xenahubs.net/download/TcgaTargetGtex_gene_expected_count.gz) to the `data/toil_download/` folder and then re-run `toil_downloader.R`.
 
+## Automatically download [Recount3](http://rna.recount.bio/) data
+
+As all the needed packages are installed in the `R` environment, we can run the `recount_downloader.R` file to download the data.
+
+```bash
+Rscript recount3_downloader.R
+```
+
 ## Automatically download [Wang et al.](https://www.nature.com/articles/sdata201861) joint TCGA/GTEx dataset
 
 This database is hosted in [this](https://doi.org/10.6084/m9.figshare.5330593) figshare link but we will download it programmatically.
@@ -121,7 +130,8 @@ pip install pyarrow
 pip install adjustText
 pip install sklearn
 pip install tqdm
-pip install umap-learn
+pip install scanpy
+pip install qnorm
 ```
 
 **Note:**

@@ -2,25 +2,25 @@
 # GPU to use
 GPU=2
 # Dataset parameters #####################################
-SOURCE=recount3
+SOURCE=toil
 DATASET=both
 TISSUE=all
 ALL_VS_ONE=False
 MEAN_THR=-10.0
 STD_THR=0.01
 RAND_FRAC=1.0
-SAMPLE_FRAC=0.5
+SAMPLE_FRAC=0.99
 GENE_LIST_CSV=None
-BATCH_NORM=normal
+BATCH_NORM=None
 FOLD_NUMBER=5
 SEED=0
 # Training parameters #####################################
 LR=0.00001
 WEIGHTS=True
 BATCH_SIZE=100
-EPOCHS=20
+EPOCHS=50
 # Names ###################################################
-EXP_NAME=recount3_class # misc_test
+EXP_NAME=misc_test # misc_test
 # Mode ####################################################
 MODE=train # train, test or both
 
