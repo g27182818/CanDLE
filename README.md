@@ -132,6 +132,7 @@ pip install sklearn
 pip install tqdm
 pip install scanpy
 pip install qnorm
+pip install combat
 ```
 
 **Note:**

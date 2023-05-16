@@ -19,15 +19,7 @@ plt.rcParams['axes.axisbelow'] = True
 
 
 # Get Parser
-parser = get_dataset_parser()
-
-# Add arguments for model training
-parser.add_argument('--lr',             type=float, default=0.00001,        help="Learning rate")
-parser.add_argument('--weights',        type=str,   default='True',         help="Wether to train CanDLE with weighted cross entropy",                                                                   choices=['True', 'False'])
-parser.add_argument('--batch_size',     type=int,   default=100,            help="Batch size")
-parser.add_argument('--epochs',         type=int,   default=20,             help="Number of epochs")
-parser.add_argument('--mode',           type=str,   default="train",        help="Train, test or do both for a CanDLE model.",                                                                           choices=['train', 'test','both'])
-parser.add_argument('--exp_name',       type=str,   default='misc_test',    help="Experiment name to save")
+parser = get_general_parser()
 # Parse the argument
 args = parser.parse_args()
 
@@ -100,7 +92,7 @@ if (args.mode == "train") or (args.mode == 'both'):
 
         # Define optimizer and criterion
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))
-        criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor) if args.weights == 'True' else torch.nn.CrossEntropyLoss()
+        criterion = torch.nn.CrossEntropyLoss(weight=lw_tensor) if args.weights else torch.nn.CrossEntropyLoss()
 
         # Dataloader declaration
         train_loader, test_loader = dataset.get_dataloaders(batch_size = args.batch_size, fold=i)

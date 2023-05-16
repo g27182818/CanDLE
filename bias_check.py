@@ -22,34 +22,15 @@ params = {'legend.fontsize': 'large',
 pylab.rcParams.update(params)
 
 # Get Parser
-parser = get_dataset_parser()
+parser = get_general_parser()
 # Parse the argument
 args = parser.parse_args()
 args_dict = vars(args)
 
-# Define list of complete labels
-complete_label_list = [ 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER',
-                        'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS',
-                        'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT',
-                        'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA',
-                        'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH',
-                        'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO',
-                        'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD',
-                        'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
-
-# TODO: Modify this so the bias check can be made with the all_vs_one parameter and not from inside the code
-# Define binary dict with the TCGA data labeled as 1
-binary_dict = {}
-for label in complete_label_list:
-    if label[:4] == 'GTEX':
-        binary_dict[label] = 0
-    else:
-        binary_dict[label] = 1
-
 # Declare dataset depending on the source
 if args.source == 'toil':
     dataset = ToilDataset(  os.path.join('data', 'toil_data'),          dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict=binary_dict,
+                            tissue = args.tissue,                       binary_dict={},
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
@@ -58,7 +39,7 @@ if args.source == 'toil':
 
 elif args.source == 'wang':
     dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict=binary_dict,
+                            tissue = args.tissue,                       binary_dict={},
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
@@ -67,7 +48,7 @@ elif args.source == 'wang':
 
 elif args.source == 'recount3':
     dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict=binary_dict,
+                            tissue = args.tissue,                       binary_dict={},
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                             gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
@@ -75,7 +56,7 @@ elif args.source == 'recount3':
                             force_compute = False)
 
 # Get a split of the zero fold
-split_dict = dataset.get_numpy_split(fold=0)
+split_dict = dataset.get_batch_split(fold=0)
 
 # Declare and fit linear Support Vector Machine
 clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)

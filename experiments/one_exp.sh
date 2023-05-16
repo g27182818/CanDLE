@@ -11,7 +11,7 @@ STD_THR=0.01
 RAND_FRAC=1.0
 SAMPLE_FRAC=0.99
 GENE_LIST_CSV=None
-BATCH_NORM=None
+BATCH_NORM=normal
 FOLD_NUMBER=5
 SEED=0
 # Training parameters #####################################

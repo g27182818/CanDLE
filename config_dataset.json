@@ -1,0 +1,15 @@
+{
+    "source": "toil",
+    "dataset": "both",
+    "tissue": "all", 
+    "all_vs_one": "False",
+    "mean_thr": -10.0, 
+    "std_thr": 0.01,  
+    "rand_frac": 1.0,   
+    "sample_frac": 0.99,   
+    "gene_list_csv": "None",
+    "wang_level": 1,     
+    "batch_norm": false, 
+    "fold_number": 5,     
+    "seed": 0     
+}

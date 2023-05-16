@@ -163,7 +163,7 @@ normal_tcga_mapper = {  'Bile duct':            'GTEX-LIV',     # Problematic 9 
                         'Colon':                'GTEX-COL',
                         'Endometrium':          'GTEX-UTE',     # Problematic 23 samples
                         'Esophagus':            'GTEX-ESO',
-                        'Head and Neck region': 'GTEX-SKI',     # Problematic 44 samples (Squamous cells are found in the outer layer of skin and in the mucous membranes)
+                        'Head and Neck region': 'GTEX-SAL_GLA', # Problematic 44 samples
                         'Kidney':               'GTEX-KID',
                         'Liver':                'GTEX-LIV',
                         'Lung':                 'GTEX-LUN',

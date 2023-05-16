@@ -16,18 +16,15 @@ from matplotlib.cm import get_cmap, ScalarMappable
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import TensorDataset, DataLoader
-from typing import Tuple
 import anndata as ad
 import scanpy as sc
 import warnings
+from typing import Callable, Tuple
 from qnorm import quantile_normalize
+from combat.pycombat import pycombat
 from utils import *
-from wang_utils import *
-
-
 
 # Suppress not useful warnings
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -41,129 +38,47 @@ params = {'legend.fontsize': 'large',
 pylab.rcParams.update(params)
 
 
-def wangify(data_matrix: pd.DataFrame, category_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    This function receives a data matrix and a category dataframe and returns a tuple of dataframes with the same
-    format. However the same protocols of the wang paper (https://doi.org/10.1038/sdata.2018.61) are applied to the data matrix.
-    Specifically, the following steps are performed:
-    
-        1. Samples from categories of the GTEx of TCGA that do not have sufficient paired samples in the other dataset are removed.
-        2. ComBat batch correction is applied to each tissue type separately. In other words, for a given tissue type (e.g. Lung) we 
-           perform ComBat batch correction on the samples of that tissue type from both datasets. The batch variable is the dataset
-           (GTEx or TCGA) and the deceased state (healthy or tumor) is the biologically relevant variable (design matrix).
-
-
-    Args:
-        data_matrix (pd.DataFrame): Pandas dataframe with the data matrix. Rows are genes and columns are samples.
-        category_df (pd.DataFrame): Pandas dataframe with the category information. Rows are samples and columns can vary
-                                    but must contain at least the following columns: 'lab_txt', 'is_tcga'.
-
-    Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: Tuple of dataframes with the same format as the input dataframes but with the
-                                           wang preprocessing applied.
-    """
-    
-    # Define a combat wrapper function as in 
-
-
-    # FIXME: Only allow this function if dataset is both
-
-    # Define categories that are used in the wang paper
-    wang_categories = [ 'GTEX-BLA',     'GTEX-BRE',     'GTEX-CER',     'GTEX-COL',     'GTEX-ESO',
-                        'GTEX-KID',     'GTEX-LIV',     'GTEX-LUN',     'GTEX-PRO',     'GTEX-SAL_GLA',
-                        'GTEX-STO',     'GTEX-THY',     'GTEX-UTE',     'TCGA-BLCA',    'TCGA-BRCA',
-                        'TCGA-CESC',    'TCGA-CHOL',    'TCGA-COAD',    'TCGA-ESCA',    'TCGA-HNSC',
-                        'TCGA-KICH',    'TCGA-KIRC',    'TCGA-KIRP',    'TCGA-LIHC',    'TCGA-LUAD',
-                        'TCGA-LUSC',    'TCGA-PRAD',    'TCGA-READ',    'TCGA-STAD',    'TCGA-THCA',
-                        'TCGA-UCEC',    'TCGA-UCS']
-
-    # Define wang clusters to apply ComBat batch correction in each of them
-    wang_cluster = {
-        1:  ['GTEX-PRO', 'TCGA-PRAD'],
-        2:  ['GTEX-BLA', 'TCGA-BLCA'],
-        3:  ['GTEX-BRE', 'TCGA-BRCA'],
-        4:  ['GTEX-THY', 'TCGA-THCA'],
-        5:  ['GTEX-STO', 'TCGA-STAD'],
-        6:  ['GTEX-LUN', 'TCGA-LUAD', 'TCGA-LUSC'],
-        7:  ['GTEX-LIV', 'TCGA-LIHC', 'TCGA-CHOL'],
-        8:  ['GTEX-KID', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-KICH'],
-        9:  ['GTEX-COL', 'TCGA-COAD', 'TCGA-READ'],
-        10: ['GTEX-ESO', 'TCGA-ESCA'],
-        11: ['GTEX-UTE', 'GTEX-CER', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-CESC'],
-        12: ['GTEX-SAL_GLA', 'TCGA-HNSC']
-    }
-    
-    # If healthy column is not present in category_df, add it
-    if 'healthy' not in category_df.columns:
-        category_df['healthy'] = category_df['lab_txt'].str.contains('GTEX')
-
-    # First filter out samples that are not in the wang categories
-    valid_samples = category_df.index[category_df['lab_txt'].isin(wang_categories)]
-
-    # Filter out samples that are not in the wang categories
-    data_matrix = data_matrix[valid_samples]
-    category_df = category_df.loc[valid_samples]
-
-    print(f'Reversing Log2 transform and quantile normalizing data matrix...')
-    start = time.time()
-    # FIXME: This reversion is only working for Toil at the moment. We need to add parameters here to make it work for other datasets
-    # Reverse log2 transform (using original TPM values)
-    data_matrix = np.power(2, data_matrix) - 0.001
-
-    # Quantile normalize data matrix
-    data_matrix = quantile_normalize(data_matrix, axis=1)
-    print(f'Finished in {time.time() - start:.2f} seconds.')
-
-    # Do log2(x+1) transform
-    data_matrix = np.log2(data_matrix + 1)
-
-    # Define empty dictionary to store the batch corrected data
-    batch_corrected_adata = {}
-    
-    # Cycle through wang clusters and apply ComBat batch correction to each of them
-    for cluster, categories in wang_cluster.items():
-        
-        # Filter out samples that are not in the current wang cluster
-        cluster_valid_samples = category_df.index[category_df['lab_txt'].isin(categories)]
-        cluster_data_matrix = data_matrix[cluster_valid_samples]
-        cluster_category_df = category_df.loc[cluster_valid_samples]
-
-        # Create cluster adata object
-        cluster_adata = ad.AnnData(cluster_data_matrix.T, obs=cluster_category_df)
-
-        # Get sample decomposition for cluster
-        healthy_tcga = (cluster_adata.obs['healthy'] & cluster_adata.obs['is_tcga']).sum()
-        tumor_tcga = (~cluster_adata.obs['healthy'] & cluster_adata.obs['is_tcga']).sum()
-        gtex_samples = (~cluster_adata.obs['is_tcga']).sum()
-        print(f'Cluster {cluster} with categories {categories} samples: GTEx {gtex_samples} | TCGA healthy {healthy_tcga} | TCGA tumor {tumor_tcga}') 
-
-
-        try:
-            # Apply ComBat batch correction
-            sc.pp.combat(cluster_adata, key='is_tcga', covariates=['healthy'])
-            batch_corrected_adata[cluster] = cluster_adata
-        except:
-            print(f'ComBat batch correction failed with healthy covariate. Performing batch correction without covariates...')
-            sc.pp.combat(cluster_adata, key='is_tcga')
-            batch_corrected_adata[cluster] = cluster_adata
-
-    # Concatenate all batch corrected clusters
-    batch_corrected_adata = ad.concat(batch_corrected_adata.values())
-
-    # Get data matrix and category_df from batch corrected adata
-    data_matrix = pd.DataFrame(batch_corrected_adata.X.T, index=data_matrix.index, columns=batch_corrected_adata.obs.index)
-    category_df = batch_corrected_adata.obs
-
-    return data_matrix, category_df
-
-
-
 
 class gtex_tcga_dataset():
-    def __init__(self, path, read_func, dataset = 'both', tissue='all', binary_dict={}, mean_thr=-10.0,
-                std_thr=0.01, rand_frac = 1.0, sample_frac = 0.5, gene_list_csv='None',
-                batch_normalization='None', fold_number=5, partition_seed=0, force_compute = False):
+    def __init__(
+            self,
+            path:                   str,
+            read_func:              Callable,
+            dataset:                str = 'both',
+            tissue:                 str = 'all',
+            binary_dict:            dict = {},
+            mean_thr:               float = -10.0,
+            std_thr:                float = 0.01,
+            rand_frac:              float = 1.0,
+            sample_frac:            float = 0.5,
+            gene_list_csv:          str = 'None',
+            wang_level:             int = 0,
+            batch_normalization:    str = 'None',
+            fold_number:            int = 5,
+            partition_seed:         int = 0,
+            force_compute:          bool = False
+            ):
+        """
+        This class is used to load the GTEx and TCGA datasets and perform the necessary preprocessing steps.
+        It works with the 3 possible sources: Toil, Wang and Recount3.
 
+        Args:
+            path (str): Path where the raw data is stored.
+            read_func (Callable): Function used to read the raw data. Different for each source.
+            dataset (str, optional): Whether to use 'tcga', 'gtex' or 'both'. Defaults to 'both'.
+            tissue (str, optional): Tissue to use from data. Note that the choices for source wang are limited by the available classes. Defaults to 'all'.
+            binary_dict (dict, optional): Binary dict to map available labels to 0 or 1 numeric labels. This is used to make a binary detection problem. Defaults to {}.
+            mean_thr (float, optional): Minimum mean expression for a gene to be considered. Defaults to -10.0.
+            std_thr (float, optional): Minimum standard deviation needed for a gene to be considered. Defaults to 0.01.
+            rand_frac (float, optional): Subset the samples to a random fraction between 0 and 1. Defaults to 1.0.
+            sample_frac (float, optional): For a gene to be considered it should be expressed in at least this fraction of the samples in each batch (gtex, tcga). Defaults to 0.5.
+            gene_list_csv (str, optional): Path to a gene csv that acts as a wildcard for gene filtering. Defaults to 'None'.
+            wang_level (int, optional): Level of wang processing (0: Do not perform any wang processing, 1: Leave only paired samples, 2: Quantile normalization, 3: ComBat). Defaults to 0.
+            batch_normalization (bool, optional): If true, performs z-score normalization in each batch separately. Defaults to True.
+            fold_number (int, optional): Number of folds to divide the dataset. Defaults to 5.
+            partition_seed (int, optional): Shuffle seed to perform k fold partition. Defaults to 0.
+            force_compute (bool, optional): If true, recompute all statistics and re-do all pipeline from scratch. Defaults to False.
+        """
         self.path = path
         self.read_func = read_func
         self.tissue = tissue
@@ -179,10 +94,13 @@ class gtex_tcga_dataset():
         self.rand_frac = rand_frac
         self.sample_frac = sample_frac
         self.gene_list_csv = gene_list_csv
+        self.wang_level = wang_level
         self.batch_normalization = batch_normalization
         self.fold_number = fold_number
-        self.partition_seed = partition_seed # seed for train/val/test split
+        self.partition_seed = partition_seed
         self.force_compute = force_compute
+
+        # FIXME: Assert that wang dataset has a higher minimum wang_level
 
         # FIXME: This erases the dimensionality reduction files from previous experiments
         # Make dataset directory if it does not exist
@@ -191,33 +109,47 @@ class gtex_tcga_dataset():
         # Main Bioinformatic pipeline
         # Make mapper files if they are not already saved
         self.make_mappers()
+        
         # Read data from the Recount3 dataset and perform a log2(x+1) transformation. Also return gene metadata that is only available for Recount3
         self.matrix_data, self.categories = self.read_func(self.path, self.force_compute)
+        
         # Filter Wang datasets to use GTEx, TCGA or both.
         self.matrix_data_filtered, self.categories_filtered = self.filter_datasets()
+        
         # Find stats of each dataset segment
         self.general_stats = self.find_general_stats()
+        
         # Filter genes based on mean, std and sample_frac. This also subsamples the resulting filtered gene list by self.rand_frac. 
         # If self.gene_list_csv path is specified it works like a wildcard and CanDLE will train only with the genes in the csv path
         self.filtered_gene_list, self.gene_filtered_data_matrix = self.filter_genes()
+        
         # Applies wang processing to self.gene_filtered_data_matrix
-        self.gene_filtered_data_matrix, self.categories_filtered = wangify(self.gene_filtered_data_matrix, self.categories_filtered)
+        self.gene_filtered_data_matrix, self.categories_filtered = self.wangify(self.gene_filtered_data_matrix, self.categories_filtered, self.wang_level)
+        
         # Get labels dataframe and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
+        
         # Perform batch normalization, this uses self.general_stats and normalizes self.gene_filtered_data_matrix  
         self.batch_normalize()
+        
         # # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue # TODO: Add filter by tissue function
         # self.filter_by_tissue()
+        
         # Make the problem binary in case self.binary_dict is not empty
         self.make_binary_problem() # If self.binary_dict == {} this function does nothing
+        
         # Get k fold cross validator. This is stratified
         self.k_fold_cross_validator = StratifiedKFold(n_splits=self.fold_number, shuffle=True, random_state=self.partition_seed)
+        
         # Get k fold indexes
         self.k_fold_indexes = self.get_k_fold_indexes()
+        
         # Define number of classes for classification
         self.num_classes = len(self.lab_txt_2_lab_num.keys()) if self.binary_dict == {} else 2
+        
         # Define the number of samples
         self.num_samples = len(self.label_df)
+        
         # Define the number of genes
         self.num_genes = len(self.filtered_gene_list)
 
@@ -408,9 +340,179 @@ class gtex_tcga_dataset():
 
         return gene_list.to_list(), gene_filtered_data_matrix
 
+    def wangify(self, data_matrix: pd.DataFrame, category_df: pd.DataFrame, wang_level: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        This function receives a data matrix and a category dataframe and returns a tuple of dataframes with the same
+        format. However the protocols of the original wang paper (https://doi.org/10.1038/sdata.2018.61) are applied to the data matrix.
+        Each part of the protocol is designated as a "wang_level" so the user inputs a level and the process is performed up to that level.
+        The levels are:
+
+            0:  Nothing is done to the data matrix. The data matrix is returned as is.
+            1:  Samples from categories of the GTEx of TCGA that do not have sufficient paired samples in the other dataset are removed.
+            2:  Reverse log2 transform, quantile normalize the data matrix and apply log2(x+1) transform.
+            3:  ComBat batch correction is applied to each tissue type separately. In other words, for a given tissue type (e.g. Lung) we 
+                perform ComBat batch correction on the samples of that tissue type from both datasets ('GTEX-LUN', 'TCGA-LUAD', 'TCGA-LUSC').
+                The batch variable is the dataset (GTEx or TCGA) and the deceased state (healthy or tumor) is the biologically relevant
+                variable (design matrix).
+
+
+        Args:
+            data_matrix (pd.DataFrame): Pandas dataframe with the data matrix. Rows are genes and columns are samples.
+            category_df (pd.DataFrame): Pandas dataframe with the category information. Rows are samples and columns can vary
+                                        but must contain at least the following columns: 'lab_txt', 'is_tcga'.
+            wang_level (int):   Integer that indicates the level of wang preprocessing to apply. The levels are specified in the
+                                function documentation.
+
+        Returns:
+            Tuple[pd.DataFrame, pd.DataFrame]: Tuple of dataframes with the same format as the input dataframes but with the
+                                            wang preprocessing applied.
+        """
+
+        ### Define functions to perform each level of the wang preprocessing
+        
+        def wang_sample_filtering(data_matrix: pd.DataFrame, category_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+            
+            # Define categories that are used in the wang paper
+            wang_categories = [ 'GTEX-BLA',     'GTEX-BRE',     'GTEX-CER',     'GTEX-COL',     'GTEX-ESO',
+                                'GTEX-KID',     'GTEX-LIV',     'GTEX-LUN',     'GTEX-PRO',     'GTEX-SAL_GLA',
+                                'GTEX-STO',     'GTEX-THY',     'GTEX-UTE',     'TCGA-BLCA',    'TCGA-BRCA',
+                                'TCGA-CESC',    'TCGA-CHOL',    'TCGA-COAD',    'TCGA-ESCA',    'TCGA-HNSC',
+                                'TCGA-KICH',    'TCGA-KIRC',    'TCGA-KIRP',    'TCGA-LIHC',    'TCGA-LUAD',
+                                'TCGA-LUSC',    'TCGA-PRAD',    'TCGA-READ',    'TCGA-STAD',    'TCGA-THCA',
+                                'TCGA-UCEC',    'TCGA-UCS']
+            
+            # Filter out samples that are not in the wang categories
+            valid_samples = category_df.index[category_df['lab_txt'].isin(wang_categories)]
+
+            # Filter out samples that are not in the wang categories
+            valid_data_matrix = data_matrix[valid_samples]
+            valid_category_df = category_df.loc[valid_samples]
+
+            return valid_data_matrix, valid_category_df
+
+        def wang_quantile_normalization(data_matrix: pd.DataFrame) -> pd.DataFrame:
+
+            # Get the offset used in the log2 transform of the input data
+            general_min = data_matrix.min().min()
+            offset = np.power(2, general_min)
+
+            print(f'Computed offset is {offset}')
+
+            # Reverse log2 transform (using original values)
+            orig_data_matrix = np.power(2, data_matrix) - offset
+
+            # Quantile normalize data matrix
+            qnorm_orig_data_matrix = quantile_normalize(orig_data_matrix, axis=1)
+
+            # Do log2(x+1) transform
+            qnorm_data_matrix = np.log2(qnorm_orig_data_matrix + 1)
+
+            return qnorm_data_matrix
+
+        def wang_combat(data_matrix: pd.DataFrame, category_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+            # Define wang groups to apply ComBat batch correction in each of them
+            wang_groups = {
+                1:  ['GTEX-PRO', 'TCGA-PRAD'],
+                2:  ['GTEX-BLA', 'TCGA-BLCA'],
+                3:  ['GTEX-BRE', 'TCGA-BRCA'],
+                4:  ['GTEX-THY', 'TCGA-THCA'],
+                5:  ['GTEX-STO', 'TCGA-STAD'],
+                6:  ['GTEX-LUN', 'TCGA-LUAD', 'TCGA-LUSC'],
+                7:  ['GTEX-LIV', 'TCGA-LIHC', 'TCGA-CHOL'],
+                8:  ['GTEX-KID', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-KICH'],
+                9:  ['GTEX-COL', 'TCGA-COAD', 'TCGA-READ'],
+                10: ['GTEX-ESO', 'TCGA-ESCA'],
+                11: ['GTEX-UTE', 'GTEX-CER', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-CESC'],
+                12: ['GTEX-SAL_GLA', 'TCGA-HNSC']
+            }
+
+            # Define empty dictionary to store the batch corrected data
+            batch_corrected_adata = {}
+            
+            # Cycle through wang groups and apply ComBat batch correction to each of them
+            for group, categories in wang_groups.items():
+                
+                # Filter out samples that are not in the current wang group
+                group_valid_samples = category_df.index[category_df['lab_txt'].isin(categories)]
+                group_data_matrix = data_matrix[group_valid_samples]
+                group_category_df = category_df.loc[group_valid_samples]
+
+                # Create group adata object
+                group_adata = ad.AnnData(group_data_matrix.T, obs=group_category_df)
+
+                # Get sample decomposition for group
+                healthy_tcga = (group_adata.obs['healthy'] & group_adata.obs['is_tcga']).sum()
+                tumor_tcga = (~group_adata.obs['healthy'] & group_adata.obs['is_tcga']).sum()
+                gtex_samples = (~group_adata.obs['is_tcga']).sum()
+                print(f'group {group} with categories {categories} samples: GTEx {gtex_samples} | TCGA healthy {healthy_tcga} | TCGA tumor {tumor_tcga}') 
+
+                # Apply ComBat batch correction to group adata
+                try:
+                    # Get expression matrix dataframe
+                    group_df = group_adata.to_df().T
+                    batch_list = group_adata.obs['is_tcga'].values.tolist()
+                    healthy_list = group_adata.obs['healthy'].values.tolist()
+
+                    # Apply pycombat batch correction
+                    corrected_group_df = pycombat(group_df, batch_list, mod=healthy_list, par_prior=True)
+
+                    # Assign batch corrected expression matrix to group adata
+                    group_adata.X = corrected_group_df.T
+                    # Add group adata to dictionary
+                    batch_corrected_adata[group] = group_adata
+
+                # Get the error if it fails
+                except Exception as e:
+                    print(e)   
+                    raise ValueError('Error in batch correction. Check the error above.')
+
+            # Concatenate all batch corrected groups
+            batch_corrected_adata = ad.concat(batch_corrected_adata.values())
+
+            # Get data matrix and category_df from batch corrected adata
+            corrected_data_matrix = pd.DataFrame(batch_corrected_adata.X.T, index=data_matrix.index, columns=batch_corrected_adata.obs.index)
+            corrected_category_df = batch_corrected_adata.obs
+
+            return corrected_data_matrix, corrected_category_df
+
+        # TODO: Handle the cases dataset= tcga, gtex or both
+        # FIXME: Careful when dataset is wang. Raw data starts from level 2 
+
+        # Start taking time
+        start_time = time.time()
+
+        # If healthy column is not present in category_df, add it
+        if 'healthy' not in category_df.columns:
+            category_df['healthy'] = category_df['lab_txt'].str.contains('GTEX')
+
+        # Manage the levels of processing
+        
+        if wang_level == 0:
+            # Do nothing
+            print('No Wang processing done...')
+            return data_matrix, category_df
+        
+        if wang_level >= 1:
+            print('Performing wang level 1 processing: Removal of not paired samples...')
+            data_matrix, category_df = wang_sample_filtering(data_matrix, category_df)
+        
+        if wang_level >= 2:
+            print('Performing wang level 2 processing: Quantile normalization and log2(x+1) transform...')
+            data_matrix = wang_quantile_normalization(data_matrix)
+        
+        if wang_level >= 3:
+            print('Performing wang level 3 processing: ComBat batch correction...')
+            data_matrix, category_df = wang_combat(data_matrix, category_df)
+
+        # Print the time it took to wang process the data
+        print(f'Wang processing took {time.time() - start_time:.2f} seconds.')
+        
+        return data_matrix, category_df
+
     # This function performs a data normalization by batches (GTEX or TCGA) 
     def batch_normalize(self):
-        if self.batch_normalization=='None':
+        if self.batch_normalization==False:
             print('Did not perform batch normalization...')
             return
         else:
@@ -426,17 +528,9 @@ class gtex_tcga_dataset():
             normalized_gtex = self.gene_filtered_data_matrix[gtex_samples].sub(valid_stats['gtex_mean'], axis=0)
             normalized_gtex = normalized_gtex.div(valid_stats['gtex_std'], axis=0)
            
-           # Transform TCGA data according to self.batch_normalization
-            if self.batch_normalization=='normal':
-                normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['tcga_mean'], axis=0)
-                normalized_tcga = normalized_tcga.div(valid_stats['tcga_std'], axis=0)
-            
-            elif self.batch_normalization=='healthy_tcga':
-                normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['healthy_tcga_mean'], axis=0)
-                normalized_tcga = normalized_tcga.div(valid_stats['healthy_tcga_std'], axis=0)
-            
-            else:
-                raise ValueError('Batch normalization should be None, normal or healthy_tcga.')
+            # Transforms TCGA data
+            normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['tcga_mean'], axis=0)
+            normalized_tcga = normalized_tcga.div(valid_stats['tcga_std'], axis=0)
 
             normalized_joint = pd.concat([normalized_gtex, normalized_tcga], axis=1)
 
@@ -504,7 +598,7 @@ class gtex_tcga_dataset():
 
         return train_loader, test_loader
 
-    # This function uses self.label_df to split the data into train, validation and test sets
+    # This function uses self.label_df to split the data into train and test sets depending on the fold number
     def get_numpy_split(self, fold=0):
         # Get train and test indexes depending on the fold number
         train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
@@ -515,6 +609,18 @@ class gtex_tcga_dataset():
         split_dict = {'x': {'train': train_matrix, 'test': test_matrix}, 'y': {'train': train_gt, 'test': test_gt}}
         # Return split dictionary
         return split_dict
+
+    # This is just as get_numpy_split but it returns the annotations of the batch (0: gtex, 1: tcga)
+    def get_batch_split(self, fold=0):
+        # Get train and test indexes depending on the fold number
+        train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
+        # Get train and test matrices and groundtruth
+        train_matrix, test_matrix = self.gene_filtered_data_matrix.iloc[:, train_index], self.gene_filtered_data_matrix.iloc[:, test_index]
+        train_gt, test_gt = self.label_df.iloc[train_index]['is_tcga'].astype(int), self.label_df.iloc[test_index]['is_tcga'].astype(int) 
+        # Declare x and y dictionary
+        split_dict = {'x': {'train': train_matrix, 'test': test_matrix}, 'y': {'train': train_gt, 'test': test_gt}}
+        # Return split dictionary
+        return split_dict        
 
     # This function augments the self.label_df dataframe with textual and numeric hong annotations.
     # The function returns a dictionary that goes from standard numeric annotations to hong tuple annotations
@@ -1123,20 +1229,18 @@ def read_recount3(path, force_compute):
 
 
 
-
-
 # Specific dataset declaration
 class ToilDataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_toil, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, fold_number, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_toil, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, fold_number, partition_seed, force_compute)
 
 class WangDataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_wang, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, fold_number, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_wang, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, fold_number, partition_seed, force_compute)
 
 class Recount3Dataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_recount3, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, batch_normalization, fold_number, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_recount3, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, fold_number, partition_seed, force_compute)
 
 # Test code for dataset declaration
 
