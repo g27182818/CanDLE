@@ -33,44 +33,44 @@ if args.source == 'toil':
                             tissue = args.tissue,                       binary_dict={},
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            fold_number = args.fold_number,             partition_seed = args.seed,
-                            force_compute = False)
+                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                            partition_seed = args.seed,                 force_compute = False)
 
 elif args.source == 'wang':
     dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
                             tissue = args.tissue,                       binary_dict={},
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            fold_number = args.fold_number,             partition_seed = args.seed,
-                            force_compute = False)
+                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                            partition_seed = args.seed,                 force_compute = False)
 
 elif args.source == 'recount3':
     dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
                             tissue = args.tissue,                       binary_dict={},
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            fold_number = args.fold_number,             partition_seed = args.seed,
-                            force_compute = False)
+                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                            partition_seed = args.seed,                 force_compute = False)
 
 # Get a split of the zero fold
 split_dict = dataset.get_batch_split(fold=0)
 
 # Declare and fit linear Support Vector Machine
-clf = LinearSVC(random_state=0, verbose=2, max_iter=200000)
+clf = LinearSVC(random_state=0, verbose=2, max_iter=400000)
 print('The linear SVM fit may take several minutes (non-normalized data) or hours (normalized data)...')
-clf.fit(split_dict['x']['train'].T, split_dict['y']['train'])
+clf.fit(split_dict['x']['train'].T, split_dict['y']['train']) 
 
 # Get predictions
 y_pred = clf.predict(split_dict['x']['test'].T)
 
 # Print the classification output
 bias_directory = os.path.join('results', 'bias_check')
-os.makedirs(bias_directory, exist_ok=True)
+os.makedirs(os.path.join(bias_directory, args.exp_name), exist_ok=True)
 
-with open(os.path.join(bias_directory, f'{args.source}_norm_{args.batch_norm}_sample_frac_{args.sample_frac}_log.txt'), 'a') as f:
+with open(os.path.join(bias_directory, args.exp_name, f'bias_log.txt'), 'a') as f:
     print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
     print_both('\n\n',f)
     print_both(classification_report(split_dict['y']['test'], y_pred), f)

@@ -102,10 +102,6 @@ class gtex_tcga_dataset():
 
         # FIXME: Assert that wang dataset has a higher minimum wang_level
 
-        # FIXME: This erases the dimensionality reduction files from previous experiments
-        # Make dataset directory if it does not exist
-        os.makedirs(self.dataset_info_path, exist_ok = True)
-
         # Main Bioinformatic pipeline
         # Make mapper files if they are not already saved
         self.make_mappers()
@@ -113,6 +109,9 @@ class gtex_tcga_dataset():
         # Read data from the Recount3 dataset and perform a log2(x+1) transformation. Also return gene metadata that is only available for Recount3
         self.matrix_data, self.categories = self.read_func(self.path, self.force_compute)
         
+        # Make dataset directory if it does not exist
+        os.makedirs(self.dataset_info_path, exist_ok = True)
+
         # Filter Wang datasets to use GTEx, TCGA or both.
         self.matrix_data_filtered, self.categories_filtered = self.filter_datasets()
         
@@ -487,7 +486,6 @@ class gtex_tcga_dataset():
             category_df['healthy'] = category_df['lab_txt'].str.contains('GTEX')
 
         # Manage the levels of processing
-        
         if wang_level == 0:
             # Do nothing
             print('No Wang processing done...')
@@ -934,6 +932,54 @@ class gtex_tcga_dataset():
         plot_dim_reduction(reduced_dict, meta_df, color_type='tissue', cmap='brg')
         plot_dim_reduction(reduced_dict, meta_df, color_type='class', cmap='brg')
 
+# TODO: Make adequate documentation
+def map_ensg_to_symbol(matrix_data):
+
+    print('Mapping ensemble gene IDs to gene symbol...')
+    start = time.time()
+
+    ### Undo the log2 transformation
+    print('Reversing log2(x+offset) transformation...')
+    glob_min = matrix_data.min().min()
+    offset = np.power(2, glob_min)
+    matrix_data = np.power(2, matrix_data) - offset
+
+    print(f'Computed offset: {offset}')
+
+    ### Map ensemble gene id to gene symbol
+    gene_names = pd.read_csv(os.path.join('data', "gene_names.csv"))                # Load the gene names csv file
+    matrix_data.index = matrix_data.index.str.split(".").str[0]                     # For all indexes in matrix_data remove substring after the first dot (This just indicates the version)
+    print('Filtering out genes not in gene name notation mapping...')
+    matrix_data = matrix_data.loc[matrix_data.index.isin(gene_names['ensembl_id'])] # Filter out genes not in gene name notation mapping
+    matrix_data['ensembl_id'] = matrix_data.index                                   # Add a column with the ensemble gene id to the matrix_data
+    gene_names_dict = dict(zip(gene_names['ensembl_id'], gene_names['symbol']))     # Get a dict with the ensemble gene id as key and the gene symbol as value
+    matrix_data['gene_symbol'] = matrix_data['ensembl_id'].map(gene_names_dict)     # Map the ensemble gene id to the gene symbol
+    matrix_data.drop('ensembl_id', axis=1, inplace=True)                            # Delete the ensemble gene id column
+
+    ### Deal with duplicated gene symbols
+    duplicated_genes = matrix_data[matrix_data['gene_symbol'].duplicated(keep=False)] # Get subset of genes with duplicated gene symbols
+    duplicated_genes = duplicated_genes.groupby('gene_symbol').sum()                  # Group duplicated genes by gene symbol by summing their expression values
+    matrix_data = matrix_data[~matrix_data['gene_symbol'].duplicated(keep=False)]     # Remove duplicated genes from matrix_data
+    matrix_data.set_index('gene_symbol', inplace=True)                                # Reindex matrix_data by gene_symbol
+    matrix_data = pd.concat([matrix_data, duplicated_genes])                          # Add duplicated genes to matrix_data
+
+    # Print number of duplicated genes that had to be corrected
+    print(f'{len(duplicated_genes)} gene symbols had multiple ENSG ids and were corrected.')
+
+    # Assert that there are no duplicated genes and print message
+    assert matrix_data.index.duplicated().sum() == 0 , 'There are duplicated genes in the matrix_data'
+
+    # Sort matrix_data by gene_symbol
+    matrix_data.sort_index(inplace=True)
+
+    ### Redo the log2 transformation
+    print('Redoing log2(x+offset) transformation...')
+    matrix_data = np.log2(matrix_data + offset)
+
+    print(f'Finished mapping ensemble gene id to gene symbol in {time.time()-start:.2f} seconds.')
+
+    return matrix_data
+
 
 # Reading functions for all datasets
 def read_toil(path, force_compute):
@@ -983,8 +1029,14 @@ def read_toil(path, force_compute):
         categories.sort_index(inplace=True)
         end = time.time()
         print("Time to load data: {} s".format(round(end - start, 3)))
+
+        # Map ensemble gene id to gene symbol
+        matrix_data = map_ensg_to_symbol(matrix_data)
+
         return matrix_data, categories
 
+# FIXME: Pass this to the expected counts
+# FIXME: Perform TPM in R
 def read_wang(path, force_compute):
 
     # Define helper functions
@@ -1224,6 +1276,10 @@ def read_recount3(path, force_compute):
         # Print the time needed to read and process raw data 
         end = time.time()
         print("Time to load data: {} s".format(round(end - start, 3)))
+
+        # Map ensemble gene id to gene symbol
+        matrix_data = map_ensg_to_symbol(matrix_data)
+
         return matrix_data, global_meta
 
 

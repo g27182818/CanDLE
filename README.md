@@ -46,6 +46,7 @@ if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("recount")  # May take several minutes
 BiocManager::install("recount3")
+BiocManager::install("org.Hs.eg.db")
 quit() # This will end the R session you don't need to save workspace (n)
 ```
 
@@ -91,6 +92,12 @@ As all the needed packages are installed in the `R` environment, we can run the 
 
 ```bash
 Rscript recount3_downloader.R
+```
+
+## Get gene name mapping
+
+```bash
+Rscript gene_names.R
 ```
 
 ## Automatically download [Wang et al.](https://www.nature.com/articles/sdata201861) joint TCGA/GTEx dataset
