@@ -16,19 +16,18 @@ import matplotlib.pyplot as plt
 # Set axis bellow for matplotlib
 plt.rcParams['axes.axisbelow'] = True
 
-
-
 # Get Parser
 parser = get_general_parser()
 # Parse the argument
 args = parser.parse_args()
+args_dict = vars(args)
 
+# Set manual seeds and get cuda
+seed_everything(17)
+os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
 
-
-# Miscellaneous parameters --------------------------------------------------------------------------------------------#
-torch.manual_seed(12345)            # Set torch manual seed                                                            #
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")       # Set cuda device                          #
-# ---------------------------------------------------------------------------------------------------------------------#
 
 # Handle the possibility of an all vs one binary problem
 complete_label_list = ['GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM']
@@ -44,27 +43,27 @@ if args.source == 'toil':
                             tissue = args.tissue,                       binary_dict=binary_dict,
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            fold_number = args.fold_number,             partition_seed = args.seed,
-                            force_compute = False)
+                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                            partition_seed = args.seed,                 force_compute = False)
 
 elif args.source == 'wang':
     dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
                             tissue = args.tissue,                       binary_dict=binary_dict,
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            fold_number = args.fold_number,             partition_seed = args.seed,
-                            force_compute = False)
+                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                            partition_seed = args.seed,                 force_compute = False)
 
 elif args.source == 'recount3':
     dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
                             tissue = args.tissue,                       binary_dict=binary_dict,
                             mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                             rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         batch_normalization=args.batch_norm,
-                            fold_number = args.fold_number,             partition_seed = args.seed,
-                            force_compute = False)
+                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                            partition_seed = args.seed,                 force_compute = False)
 
 # Calculate loss function weights
 distribution = np.bincount(np.ravel(dataset.label_df['lab_num']).astype(np.int64))

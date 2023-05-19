@@ -130,7 +130,7 @@ To install all required dependencies run each line sequentially:
 ```bash
 conda create -n candle
 conda activate candle
-conda install pytorch torchvision cudatoolkit=10.2 python=3.9 -c pytorch
+conda install pytorch torchvision cudatoolkit=9.0 python=3.9 -c pytorch
 pip install matplotlib
 pip install seaborn
 pip install pyarrow
@@ -140,6 +140,7 @@ pip install tqdm
 pip install scanpy
 pip install qnorm
 pip install combat
+pip install thundersvm
 ```
 
 **Note:**

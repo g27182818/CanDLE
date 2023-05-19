@@ -8,8 +8,8 @@
     "rand_frac": 1.0,   
     "sample_frac": 0.99,   
     "gene_list_csv": "None",
-    "wang_level": 0,     
-    "batch_norm": false, 
+    "wang_level": 3,     
+    "batch_norm": true, 
     "fold_number": 5,     
     "seed": 0     
 }

@@ -50,6 +50,7 @@ def get_general_parser():
     parser.add_argument('--batch_size',     type=int,       default=100,            help="Batch size")
     parser.add_argument('--epochs',         type=int,       default=20,             help="Number of epochs")
     parser.add_argument('--mode',           type=str,       default="train",        help="Train, test or do both for a CanDLE model.",                                                                           choices=['train', 'test','both'])
+    parser.add_argument('--cuda',           type=str,       default="0",            help="Which cuda device to use. Should be an int.")
     parser.add_argument('--exp_name',       type=str,       default='misc_test',    help="Experiment name to save")
     
     return parser
@@ -699,3 +700,16 @@ def plot_pr_curve(fold_performance, save_path):
 
 def tensor_2_numpy(tensor):
     return tensor.cpu().detach().numpy()
+
+def seed_everything(seed: int):
+    import random, os
+    import numpy as np
+    import torch
+    
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True  

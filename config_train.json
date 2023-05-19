@@ -1,0 +1,7 @@
+{
+    "lr": 0.00001,     
+    "epochs": 50,         
+    "mode": "train",
+    "cuda": "2",    
+    "exp_name": "class_toil_level_4"   
+}

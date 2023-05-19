@@ -364,7 +364,7 @@ recount3_normal_tcga_mapper = { 'Adrenal Gland':        'GTEX-ADR_GLA',
                                 'Cervix':               'GTEX-CER',
                                 'Colorectal':           'GTEX-COL',
                                 'Esophagus':            'GTEX-ESO',
-                                'Head and Neck':        'GTEX-SKI',     # Problematic 44 samples (Squamous cells are found in the outer layer of skin and in the mucous membranes)
+                                'Head and Neck':        'GTEX-SAL_GLA',     # Problematic 44 samples
                                 'Kidney':               'GTEX-KID',
                                 'Liver':                'GTEX-LIV',
                                 'Lung':                 'GTEX-LUN',

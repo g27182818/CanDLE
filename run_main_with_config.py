@@ -9,6 +9,7 @@ parser.add_argument('--model_config',   type=str, default='config_model.json',  
 parser.add_argument('--train_config',   type=str, default='config_train.json',      help='Path to the .json file with the configs of the training.')
 args = parser.parse_args()
 
+
 # Read the dataset, model and train configs
 with open(args.dataset_config, 'rb') as f:
     config_params = json.load(f)

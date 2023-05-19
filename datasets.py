@@ -17,6 +17,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import TensorDataset, DataLoader
 import anndata as ad
 import scanpy as sc
@@ -127,10 +128,10 @@ class gtex_tcga_dataset():
         
         # Get labels dataframe and label dictionary. 
         self.label_df, self.lab_txt_2_lab_num = self.find_labels()
-        
+ 
         # Perform batch normalization, this uses self.general_stats and normalizes self.gene_filtered_data_matrix  
         self.batch_normalize()
-        
+    
         # # Filter self.label_df and self.lab_txt_2_lab_num based on the specified tissue # TODO: Add filter by tissue function
         # self.filter_by_tissue()
         
@@ -519,18 +520,27 @@ class gtex_tcga_dataset():
             # Get the identifiers of the samples in each subset
             gtex_samples = self.label_df[self.label_df['is_tcga']==False].index
             tcga_samples = self.label_df[self.label_df['is_tcga']==True].index
-            # Get stats of the valid genes
-            valid_stats = self.general_stats.loc[self.filtered_gene_list, :]
+            
+            # Get the data matrices of each subset
+            gtex_data = self.gene_filtered_data_matrix[gtex_samples]
+            tcga_data = self.gene_filtered_data_matrix[tcga_samples]
 
-            # Transforms GTEx data
-            normalized_gtex = self.gene_filtered_data_matrix[gtex_samples].sub(valid_stats['gtex_mean'], axis=0)
-            normalized_gtex = normalized_gtex.div(valid_stats['gtex_std'], axis=0)
-           
-            # Transforms TCGA data
-            normalized_tcga = self.gene_filtered_data_matrix[tcga_samples].sub(valid_stats['tcga_mean'], axis=0)
-            normalized_tcga = normalized_tcga.div(valid_stats['tcga_std'], axis=0)
+            # Get index and columns of the data matrices
+            gtex_index = gtex_data.index
+            tcga_index = tcga_data.index
+            gtex_columns = gtex_data.columns
+            tcga_columns = tcga_data.columns
 
-            normalized_joint = pd.concat([normalized_gtex, normalized_tcga], axis=1)
+            # Apply standardization to each subset
+            normalized_gtex_data = StandardScaler().fit_transform(gtex_data.T).T
+            normalized_tcga_data = StandardScaler().fit_transform(tcga_data.T).T
+            
+            # Create dataframes from the normalized data
+            normalized_gtex_df = pd.DataFrame(normalized_gtex_data, index=gtex_index, columns=gtex_columns)
+            normalized_tcga_df = pd.DataFrame(normalized_tcga_data, index=tcga_index, columns=tcga_columns)
+
+            # Concatenate the normalized dataframes
+            normalized_joint = pd.concat([normalized_gtex_df, normalized_tcga_df], axis=1)
 
             # Sort columns of normalized joint
             normalized_joint = normalized_joint.T.sort_index().T
