@@ -401,6 +401,7 @@ class gtex_tcga_dataset():
             # Reverse log2 transform (using original values)
             orig_data_matrix = np.power(2, data_matrix) - offset
 
+            # FIXME: !!!!!! Careful with the axis of the quantile normalization !!!!!!
             # Quantile normalize data matrix
             qnorm_orig_data_matrix = quantile_normalize(orig_data_matrix, axis=1)
 

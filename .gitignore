@@ -1,7 +1,9 @@
 Results/
 __pycache__/
-data/
 MANIFEST.txt
 config.lintr
 .lintr
 results/
+data/toil_data/
+data/recount3_data/
+data/wang_data/
