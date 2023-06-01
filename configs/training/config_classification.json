@@ -1,0 +1,8 @@
+{
+    "lr": 0.00001,
+    "batch_size": 100,     
+    "epochs": 50,         
+    "mode": "train", 
+    "cuda": "2",   
+    "exp_name": "classification_exp"   
+}

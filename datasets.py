@@ -11,6 +11,7 @@ import zipfile
 import gzip
 import shutil
 import pylab
+from rnanorm import TPM
 import matplotlib.patches as mpatches
 from matplotlib.cm import get_cmap, ScalarMappable
 from matplotlib.colors import LinearSegmentedColormap
@@ -38,7 +39,7 @@ params = {'legend.fontsize': 'large',
          'ytick.labelsize':'large'}
 pylab.rcParams.update(params)
 
-
+warnings.filterwarnings("ignore", category=UserWarning, module=r'.*rnanorm')
 
 class gtex_tcga_dataset():
     def __init__(
@@ -401,7 +402,6 @@ class gtex_tcga_dataset():
             # Reverse log2 transform (using original values)
             orig_data_matrix = np.power(2, data_matrix) - offset
 
-            # FIXME: !!!!!! Careful with the axis of the quantile normalization !!!!!!
             # Quantile normalize data matrix
             qnorm_orig_data_matrix = quantile_normalize(orig_data_matrix, axis=1)
 
@@ -478,7 +478,6 @@ class gtex_tcga_dataset():
             return corrected_data_matrix, corrected_category_df
 
         # TODO: Handle the cases dataset= tcga, gtex or both
-        # FIXME: Careful when dataset is wang. Raw data starts from level 2 
 
         # Start taking time
         start_time = time.time()
@@ -1046,10 +1045,11 @@ def read_toil(path, force_compute):
 
         return matrix_data, categories
 
-# FIXME: Pass this to the expected counts
-# FIXME: Perform TPM in R
 def read_wang(path, force_compute):
-
+    """
+    Read the Wang data set with root path and returns matrix_data and categories dataframes. The 
+    matrix_data dataframe is already TPM normalized and log2(x+1) transformed.
+    """
     # Define helper functions
     # This function unzips the raw downloaded data from 
     def unzip_data(path, force_compute):
@@ -1096,6 +1096,69 @@ def read_wang(path, force_compute):
         label = label.upper()
 
         return label
+
+
+    def tpm_transform(data: pd.DataFrame) -> pd.DataFrame:
+        """
+        This function transforms the counts in a dataframe to TPM. The function returns the transformed dataframe object.
+        It also removes genes that are not fount in the gtf annotation file.
+
+        Args:
+            data (pd.DataFrame): The dataframe object to transform.
+
+        Returns:
+            pd.Dataframe: The transformed dataframe object with TPM values.
+        """
+        # Get the number of genes before filtering
+        initial_genes = data.shape[0]
+
+        # FIXME: this should work with gencode.v19.annotation but for now it is working with GCF_000001405.40
+        # Unzip the data in annotations folder if it is not already unzipped
+        # if not os.path.exists(os.path.join('data', 'annotations', 'gencode.v19.annotation.gtf')):
+        #    with gzip.open(os.path.join('data', 'annotations', 'gencode.v19.annotation.gtf.gz'), 'rb') as f_in:
+        #         with open(os.path.join('data', 'annotations', 'gencode.v19.annotation.gtf'), 'wb') as f_out:
+        #             shutil.copyfileobj(f_in, f_out)
+        
+        # Define gtf path
+        # gtf_path = os.path.join('data', 'annotations', 'gencode.v19.annotation.gtf')
+
+        # Unzip the data in annotations folder if it is not already unzipped
+        if not os.path.exists(os.path.join('data', 'annotations', 'GCF_000001405.40')):
+            with zipfile.ZipFile(os.path.join('data', 'annotations', 'GCF_000001405.40.zip'), 'r') as zip_ref:
+                zip_ref.extractall(os.path.join('data', 'annotations', 'GCF_000001405.40'))
+        
+        # Define gtf path
+        gtf_path = os.path.join('data', 'annotations', 'GCF_000001405.40', 'ncbi_dataset', 'data', 'GCF_000001405.40', 'genomic.gtf')
+
+        # Get the TPM transform object
+        tpm_transformation = TPM(gtf=gtf_path).set_output(transform="pandas")
+
+        # Get the counts matrix and transpose it
+        counts = data.copy().T
+
+        # Transform the counts to TPM
+        start = time.time()
+        tpm = tpm_transformation.fit_transform(counts)
+        end = time.time()
+        print(f'TPM transformation took {end - start:.2f} seconds')
+
+        # Get the genes that do not have nan values in the TPM matrix
+        mask = ~tpm.isna().any(axis=0)
+
+        # Filter the genes
+        tpm = tpm.loc[:, mask]
+
+        # Transpose the TPM matrix again
+        tpm = tpm.T
+
+        # Print filtering results
+        rem_genes = initial_genes - tpm.shape[0]
+        rem_genes_pct = (rem_genes) / initial_genes * 100
+        print(f'Number of genes removed by TPM transformation: {rem_genes}/{initial_genes} ({rem_genes_pct:.2f}%)')
+
+        # Return the transformed AnnData object
+        return tpm
+
 
     # Unzip data in case it is needed
     unzip_data(path, force_compute)
@@ -1151,9 +1214,12 @@ def read_wang(path, force_compute):
         end = time.time()
         print(f'Time to read data: {round(end-start,2)} s')
 
+        # Perform TPM transformation
+        data_matrix = tpm_transform(data_matrix)
+
         # Log2(x+1) transform the data
         tqdm.pandas(desc="Computing Log2(x+1) transform")
-        data_matrix = data_matrix.progress_apply(lambda x: np.log2(x+1))
+        data_matrix = data_matrix.progress_apply(lambda x: np.log2(x+1), axis=1)
         
         # Sort matrix data columns by samples name
         data_matrix = data_matrix.reindex(sorted(data_matrix.columns), axis=1)
@@ -1162,6 +1228,9 @@ def read_wang(path, force_compute):
 
         # Reset index to save in feather file
         data_matrix.reset_index(inplace=True)
+
+        # Change the name of the index column to Hugo_Symbol
+        data_matrix.rename(columns={'index': 'Hugo_Symbol'}, inplace=True)
 
         print(f'Saving processed data to {os.path.join(path, "processed_data")}')
         os.makedirs(os.path.join(path, 'processed_data'), exist_ok=True)
@@ -1184,6 +1253,7 @@ def read_wang(path, force_compute):
 
     return data_matrix, category_df
 
+# FIXME: Make sure that this data is in TPM
 def read_recount3(path, force_compute):
         """
         Reads data from the Recount3 data set with root path and returns matrix_data and categories dataframes.
@@ -1292,8 +1362,6 @@ def read_recount3(path, force_compute):
         matrix_data = map_ensg_to_symbol(matrix_data)
 
         return matrix_data, global_meta
-
-
 
 
 # Specific dataset declaration

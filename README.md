@@ -116,7 +116,7 @@ This database is hosted in [this](https://doi.org/10.6084/m9.figshare.5330593) f
 2. Download data with wget:
 
    ```bash
-   wget -O raw_data.zip https://figshare.com/ndownloader/articles/5330593/versions/2
+   wget -O raw_data.zip https://figshare.com/ndownloader/articles/5330539/versions/2
    cd ..
    cd ..
    ```

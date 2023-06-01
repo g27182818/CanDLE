@@ -1,9 +1,8 @@
 import json
 import subprocess
-import argparse
 import os
 
-datasets = ['toil', 'recount3'] #, 'wang'] # TODO: implement all levels of processing for wang
+datasets = ['wang', 'toil', 'recount3']
 processing_levels = [0, 1, 2, 3, 4]
 
 # Iterate over processing levels
@@ -22,7 +21,7 @@ for lev in processing_levels:
             model_config = json.load(f)
 
         # Read training config
-        with open(os.path.join('configs', 'models', f'config_bias.json'), 'r') as f:
+        with open(os.path.join('configs', 'training', f'config_bias.json'), 'r') as f:
             training_config = json.load(f)
         
         # Unify config params

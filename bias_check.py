@@ -1,5 +1,5 @@
 from sklearn.svm import LinearSVC
-from thundersvm import OneClassSVM
+from thundersvm import OneClassSVM, SVC
 from sklearn.linear_model import SGDClassifier
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
@@ -60,9 +60,10 @@ elif args.source == 'recount3':
 split_dict = dataset.get_batch_split(fold=0)
 
 # Declare and fit linear Support Vector Machine
-# clf = LinearSVC(random_state=0, verbose=2, max_iter=400000)
 # TODO: Apply 5 fold cross validation
-clf = OneClassSVM(kernel='linear', verbose=True, max_iter=-1, tol=1e-4)
+# TODO: Use right the one class SVM
+# clf = OneClassSVM(kernel='linear', verbose=True, max_iter=-1, tol=1e-4)
+clf = SVC(kernel='linear', verbose=True, max_iter=-1, tol=1e-4)
 print('The linear SVM fit may take several minutes...')
 clf.fit(split_dict['x']['train'].T, split_dict['y']['train']) 
 
