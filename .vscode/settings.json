@@ -3,6 +3,7 @@
         "BLCA",
         "BRCA",
         "CHOL",
+        "clisi",
         "COAD",
         "edata",
         "exps",
@@ -17,8 +18,10 @@
         "PRAD",
         "pycombat",
         "qnorm",
+        "scib",
         "STAD",
         "THCA",
+        "thundersvm",
         "UCEC",
         "wangify"
     ]

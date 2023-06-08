@@ -141,6 +141,8 @@ pip install scanpy
 pip install qnorm
 pip install combat
 pip install thundersvm
+pip install scib
+pip install pynndescent
 ```
 
 **Note:**

@@ -10,6 +10,7 @@ import string
 # Import auxiliary functions
 from utils import *
 from datasets import *
+from batch_metrics import *
 
 
 # Set axis bellow for matplotlib
@@ -55,6 +56,11 @@ elif args.source == 'recount3':
                             gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
                             batch_normalization=args.batch_norm,        fold_number = args.fold_number,
                             partition_seed = args.seed,                 force_compute = False)
+
+# Get batch metrics
+test_adata = get_adata_from_dataset(dataset)
+test_adata = process_adata(test_adata)
+batch_metrics_dict = get_biological_metrics(test_adata)
 
 # Get a split of the zero fold
 split_dict = dataset.get_batch_split(fold=0)

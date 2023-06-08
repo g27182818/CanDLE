@@ -102,8 +102,6 @@ class gtex_tcga_dataset():
         self.partition_seed = partition_seed
         self.force_compute = force_compute
 
-        # FIXME: Assert that wang dataset has a higher minimum wang_level
-
         # Main Bioinformatic pipeline
         # Make mapper files if they are not already saved
         self.make_mappers()

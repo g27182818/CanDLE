@@ -64,7 +64,7 @@ elif args.source == 'recount3':
                             gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
                             batch_normalization=args.batch_norm,        fold_number = args.fold_number,
                             partition_seed = args.seed,                 force_compute = False)
-
+    
 # Calculate loss function weights
 distribution = np.bincount(np.ravel(dataset.label_df['lab_num']).astype(np.int64))
 loss_weights = 2500000 / (distribution**2)
