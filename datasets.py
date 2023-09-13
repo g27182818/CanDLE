@@ -27,6 +27,7 @@ from typing import Callable, Tuple
 from qnorm import quantile_normalize
 from combat.pycombat import pycombat
 from utils import *
+import matplotlib.pyplot as plt
 
 # Suppress not useful warnings
 pd.options.mode.chained_assignment = None  # default='warn'

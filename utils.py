@@ -11,6 +11,7 @@ import matplotlib.colors as colors
 from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap
 import pylab
+from datasets import *
 
 # Set figure fontsizes
 params = {'legend.fontsize': 'large',
@@ -485,6 +486,48 @@ def get_paths(exp_name):
     
     return path_dict
 
+def get_dataset_from_args(args):
+    """
+    This function returns a dataset object using the arguments of the argparse depending on the source argument.
+
+    Raises:
+        ValueError: If the source argument is not valid.
+
+    Returns:
+        gtex_tcga_dataset: A dataset object according to the source argument.
+    """
+
+    # Declare dataset depending on the source
+    if args.source == 'toil':
+        dataset = ToilDataset(  os.path.join('data', 'toil_data'),          dataset = args.dataset,
+                                tissue = args.tissue,                       binary_dict={},
+                                mean_thr = args.mean_thr,                   std_thr = args.std_thr,
+                                rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
+                                gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                                batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                                partition_seed = args.seed,                 force_compute = False)
+
+    elif args.source == 'wang':
+        dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
+                                tissue = args.tissue,                       binary_dict={},
+                                mean_thr = args.mean_thr,                   std_thr = args.std_thr,
+                                rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
+                                gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                                batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                                partition_seed = args.seed,                 force_compute = False)
+
+    elif args.source == 'recount3':
+        dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
+                                tissue = args.tissue,                       binary_dict={},
+                                mean_thr = args.mean_thr,                   std_thr = args.std_thr,
+                                rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
+                                gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
+                                batch_normalization=args.batch_norm,        fold_number = args.fold_number,
+                                partition_seed = args.seed,                 force_compute = False)
+    else:
+        raise ValueError('Invalid source argument. Valid arguments are: toil, wang, recount3')
+    
+    return dataset
 
 def plot_training(fold_performance, save_path):
     """

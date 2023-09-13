@@ -29,38 +29,26 @@ parser = get_general_parser()
 args = parser.parse_args()
 args_dict = vars(args)
 
-# Declare dataset depending on the source
-if args.source == 'toil':
-    dataset = ToilDataset(  os.path.join('data', 'toil_data'),          dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict={},
-                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
-                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                            partition_seed = args.seed,                 force_compute = False)
+# Obtain dataset depending on the source
+dataset = get_dataset_from_args(args)
+# Set wang level to 0 to obtain unprocessed data
+prev_wang_level = args.wang_level
+args.wang_level = 0
+unprocessed_dataset = get_dataset_from_args(args)
+# Restore wang level
+args.wang_level = prev_wang_level
 
-elif args.source == 'wang':
-    dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict={},
-                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
-                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                            partition_seed = args.seed,                 force_compute = False)
-
-elif args.source == 'recount3':
-    dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict={},
-                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
-                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                            partition_seed = args.seed,                 force_compute = False)
-
-# Get batch metrics
+# Get adata from datasets
 test_adata = get_adata_from_dataset(dataset)
+unprocessed_adata = get_adata_from_dataset(unprocessed_dataset)
+
+# Process adatas to compute batch metrics
 test_adata = process_adata(test_adata)
-batch_metrics_dict = get_biological_metrics(test_adata)
+unprocessed_adata = process_adata(unprocessed_adata)
+
+# Get biological metrics
+batch_metrics_dict = get_biological_metrics(test_adata, unprocessed_adata)
+breakpoint()
 
 # Get a split of the zero fold
 split_dict = dataset.get_batch_split(fold=0)

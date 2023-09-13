@@ -50,7 +50,19 @@ BiocManager::install("org.Hs.eg.db")
 quit() # This will end the R session you don't need to save workspace (n)
 ```
 
-Run the downloader:
+Download the big files:
+```bash
+mkdir -p data
+cd data
+mkdir -p toil_download
+cd toil_download
+wget https://toil.xenahubs.net/download/TcgaTargetGtex_rsem_gene_tpm.gz
+wget https://toil.xenahubs.net/download/TcgaTargetGtex_gene_expected_count.gz
+cd ..
+cd ..
+```
+
+Run the downloader of metadata files and data processor:
 
 ```bash
 Rscript toil_downloader.R
@@ -135,7 +147,7 @@ pip install matplotlib
 pip install seaborn
 pip install pyarrow
 pip install adjustText
-pip install sklearn
+pip install scikit-learn
 pip install tqdm
 pip install scanpy
 pip install qnorm

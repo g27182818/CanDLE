@@ -65,6 +65,10 @@ def get_adata_from_dataset(dataset):
     X = dataset.gene_filtered_data_matrix.T
     obs = dataset.label_df
 
+    # Assure the indexes are in the same order
+    X.sort_index(inplace=True)
+    obs.sort_index(inplace=True)
+
     adata = ad.AnnData(X=X, obs=obs)
 
     ### In case the dataset has not been sample filtered yet (processing level 0), we do it here
@@ -108,26 +112,33 @@ def process_adata(adata: ad.AnnData) -> ad.AnnData:
     return adata
 
 # TODO: Add un-integrated adata for the other metrics in the parameters 
-def get_biological_metrics(adata: ad.AnnData) -> dict:
+def get_biological_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnData) -> dict:
     
-    # Cast tissue_txt to categorical
+    # Cast tissue_txt and is_tcga to categorical
     adata.obs['tissue_txt'] = adata.obs['tissue_txt'].astype('category')
+    unprocessed_adata.obs['tissue_txt'] = unprocessed_adata.obs['tissue_txt'].astype('category')
 
-    breakpoint()
+    adata.obs['is_tcga'] = adata.obs['is_tcga'].astype('category')
+    unprocessed_adata.obs['is_tcga'] = unprocessed_adata.obs['is_tcga'].astype('category')
+
+    # Start time tracking
+    start = time.time()
+
+    # Compute metrics
+    m_hvg_overlap = scib.metrics.hvg_overlap(unprocessed_adata, adata, batch_key='is_tcga', n_hvg=500, verbose=False)
     m_ari = scib.metrics.ari(adata, label_key='tissue_txt', cluster_key='cluster')
     m_nmi = scib.metrics.nmi(adata, label_key='tissue_txt', cluster_key='cluster')
     m_asw = scib.metrics.isolated_labels_asw(adata, label_key="tissue_txt", batch_key='is_tcga', embed="X_pca", verbose=False, scale=True)
     m_sil = scib.metrics.silhouette(adata, label_key='tissue_txt', embed="X_pca", scale=True)
     m_clisi = scib.metrics.clisi_graph(adata, "tissue_txt", "full")
-    m_il_f1 = scib.me.isolated_labels_f1(adata, label_key="tissue_txt", batch_key='is_tcga', embed=None, verbose=False)
-    
-    # TODO: Add cell_cycle metric
-    # TODO: Add hvg_overlap metric
+    m_il_f1 = scib.metrics.isolated_labels_f1(adata, label_key="tissue_txt", batch_key='is_tcga', embed=None, verbose=False)
 
+    # Print time elapsed
+    print(f'Computed biological metrics in {time.time() - start:.2f} seconds')
 
     # NOTE: The trajectory conservation metric is not computed here because it is not applicable to bulk RNASeq data.
-
-    breakpoint()
+    # NOTE: Cell cycle conservation is also not computed because it estimates a cell cycle phase for each sample and then computes the variance contribution
+    #       of each cycle phase to the global batch or dataset. A cell cycle phase estimation should not be done over bulk RNS-Seq as it contain hundreds to thousands of cells.
 
     metric_dict = {
         'ARI': m_ari,
@@ -135,7 +146,8 @@ def get_biological_metrics(adata: ad.AnnData) -> dict:
         'ASW': m_asw,
         'SIL': m_sil,
         'CLISI': m_clisi,
-        'IL_F1': m_il_f1
+        'IL_F1': m_il_f1,
+        'HVG_OVERLAP': m_hvg_overlap
     }
 
     return metric_dict
