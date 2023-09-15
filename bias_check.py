@@ -7,6 +7,7 @@ from sklearn.metrics import classification_report
 import os
 import pylab
 import string
+import time
 # Import auxiliary functions
 from utils import *
 from datasets import *
@@ -29,25 +30,46 @@ parser = get_general_parser()
 args = parser.parse_args()
 args_dict = vars(args)
 
+# Start timer
+start = time.time()
+
 # Obtain dataset depending on the source
 dataset = get_dataset_from_args(args)
-# Set wang level to 0 to obtain unprocessed data
+# Set wang level to 0, and batch norm to false to obtain unprocessed data
 prev_wang_level = args.wang_level
+prev_batch_norm = args.batch_norm
 args.wang_level = 0
+args.batch_norm = False
 unprocessed_dataset = get_dataset_from_args(args)
 # Restore wang level
 args.wang_level = prev_wang_level
+args.batch_norm = prev_batch_norm
 
 # Get adata from datasets
-test_adata = get_adata_from_dataset(dataset)
+adata = get_adata_from_dataset(dataset)
 unprocessed_adata = get_adata_from_dataset(unprocessed_dataset)
 
 # Process adatas to compute batch metrics
-test_adata = process_adata(test_adata)
+adata = process_adata(adata)
 unprocessed_adata = process_adata(unprocessed_adata)
 
+# Get batch correction metrics
+batch_metrics_dict = get_batch_correction_metrics(adata, unprocessed_adata)
 # Get biological metrics
-batch_metrics_dict = get_biological_metrics(test_adata, unprocessed_adata)
+biological_metrics_dict = get_biological_conservation_metrics(adata, unprocessed_adata)
+
+# Join both dictionaries
+metrics_dict = {**batch_metrics_dict, **biological_metrics_dict}
+
+# Compute global score and add it to the dictionary
+metrics_dict['GLOBAL_SCORE'] = 0.6*metrics_dict['BIOLOGICAL_MEAN'] + 0.4*metrics_dict['CORRECTION_MEAN']
+
+print(metrics_dict)
+
+# Print time
+print(f'Total time to get integration metrics: {time.time() - start:.2f} seconds')
+
+
 breakpoint()
 
 # Get a split of the zero fold

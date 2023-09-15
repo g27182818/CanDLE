@@ -155,6 +155,17 @@ pip install combat
 pip install thundersvm
 pip install scib
 pip install pynndescent
+# conda install -c conda-forge r-base # May take several minutes. Just used in case of kBET
+# pip install rpy2 # Just used in case of kBET
+```
+
+FIXME: kBET is not used right now. Don't do this.
+Lastly you should also install some R packages to use the `kBET` algorithm in the bias check:
+```R
+R # This should open an R session
+install.packages('remotes')
+remotes::install_github('theislab/kBET')
+quit() # This will end the R session you don't need to save workspace (n)
 ```
 
 **Note:**

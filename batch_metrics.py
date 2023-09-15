@@ -3,6 +3,7 @@ import pandas as pd
 import scib
 import scanpy as sc
 import warnings
+import numpy as np
 import time
 
 # FIlter intern numba umap warning that I could not fix
@@ -111,9 +112,22 @@ def process_adata(adata: ad.AnnData) -> ad.AnnData:
     
     return adata
 
-# TODO: Add un-integrated adata for the other metrics in the parameters 
-def get_biological_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnData) -> dict:
-    
+
+def get_biological_conservation_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnData) -> dict:
+    """
+    This function takes a processed adata object and an unprocessed adata object and computes the biological signal 
+    conservation metrics. The metrics computed are: ARI, NMI, ASW, SIL, CLISI, IL_F1 and HVG_OVERLAP. Details about
+    each metric can be found in the scib documentation: https://scib.readthedocs.io/en/latest/api.html and in the
+    original publication: https://doi.org/10.1038/s41592-021-01336-8
+
+    Args:
+        adata (ad.AnnData): Test anndata object already processed with process_adata function.
+        unprocessed_adata (ad.AnnData): The initial anndata object withoun any batch integration. Must have been passed through process_adata function. 
+
+    Returns:
+        dict: Dictionary with the computed metrics.
+    """
+
     # Cast tissue_txt and is_tcga to categorical
     adata.obs['tissue_txt'] = adata.obs['tissue_txt'].astype('category')
     unprocessed_adata.obs['tissue_txt'] = unprocessed_adata.obs['tissue_txt'].astype('category')
@@ -124,14 +138,17 @@ def get_biological_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnData) -> 
     # Start time tracking
     start = time.time()
 
+    # Define metric dictionary
+    metric_dict = {}
+
     # Compute metrics
-    m_hvg_overlap = scib.metrics.hvg_overlap(unprocessed_adata, adata, batch_key='is_tcga', n_hvg=500, verbose=False)
-    m_ari = scib.metrics.ari(adata, label_key='tissue_txt', cluster_key='cluster')
-    m_nmi = scib.metrics.nmi(adata, label_key='tissue_txt', cluster_key='cluster')
-    m_asw = scib.metrics.isolated_labels_asw(adata, label_key="tissue_txt", batch_key='is_tcga', embed="X_pca", verbose=False, scale=True)
-    m_sil = scib.metrics.silhouette(adata, label_key='tissue_txt', embed="X_pca", scale=True)
-    m_clisi = scib.metrics.clisi_graph(adata, "tissue_txt", "full")
-    m_il_f1 = scib.metrics.isolated_labels_f1(adata, label_key="tissue_txt", batch_key='is_tcga', embed=None, verbose=False)
+    metric_dict['HVG_OVERLAP'] = scib.metrics.hvg_overlap(unprocessed_adata, adata, batch_key='is_tcga', n_hvg=500, verbose=False)
+    metric_dict['ARI'] = scib.metrics.ari(adata, label_key='tissue_txt', cluster_key='cluster')
+    metric_dict['NMI'] = scib.metrics.nmi(adata, label_key='tissue_txt', cluster_key='cluster')
+    metric_dict['ASW'] = scib.metrics.isolated_labels_asw(adata, label_key="tissue_txt", batch_key='is_tcga', embed="X_pca", verbose=False, scale=True)
+    metric_dict['SIL'] = scib.metrics.silhouette(adata, label_key='tissue_txt', embed="X_pca", scale=True)
+    metric_dict['CLISI'] = scib.metrics.clisi_graph(adata, label_key='tissue_txt', type_='full', n_cores=-1, scale=True)
+    metric_dict['IL_F1'] = scib.metrics.isolated_labels_f1(adata, label_key="tissue_txt", batch_key='is_tcga', embed=None, verbose=False)
 
     # Print time elapsed
     print(f'Computed biological metrics in {time.time() - start:.2f} seconds')
@@ -140,17 +157,55 @@ def get_biological_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnData) -> 
     # NOTE: Cell cycle conservation is also not computed because it estimates a cell cycle phase for each sample and then computes the variance contribution
     #       of each cycle phase to the global batch or dataset. A cell cycle phase estimation should not be done over bulk RNS-Seq as it contain hundreds to thousands of cells.
 
-    metric_dict = {
-        'ARI': m_ari,
-        'NMI': m_nmi,
-        'ASW': m_asw,
-        'SIL': m_sil,
-        'CLISI': m_clisi,
-        'IL_F1': m_il_f1,
-        'HVG_OVERLAP': m_hvg_overlap
-    }
+    # Get list of the values of the metrics
+    metric_values = list(metric_dict.values())
+    # Add the mean of the values to the dictionary
+    metric_dict['BIOLOGICAL_MEAN'] = np.mean(metric_values)
 
     return metric_dict
 
 
-# TODO: Add batch correction metrics function
+def get_batch_correction_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnData) -> dict:
+    """
+    This function takes a processed adata object and an unprocessed adata object and computes the batch correction
+    metrics. The metrics computed are: GC, ILISI_GRAPH, KBET, PCR, SIL_BATCH. Details about each metric
+    can be found in the scib documentation: https://scib.readthedocs.io/en/latest/api.html and in theoriginal
+    publication: https://doi.org/10.1038/s41592-021-01336-8
+
+    Args:
+        adata (ad.AnnData): Test anndata object already processed with process_adata function.
+        unprocessed_adata (ad.AnnData): The initial anndata object withoun any batch integration. Must have been passed through process_adata function. 
+
+    Returns:
+        dict: Dictionary with the computed metrics.
+    """
+
+    # Cast tissue_txt and is_tcga to categorical
+    adata.obs['tissue_txt'] = adata.obs['tissue_txt'].astype('category')
+    unprocessed_adata.obs['tissue_txt'] = unprocessed_adata.obs['tissue_txt'].astype('category')
+
+    adata.obs['is_tcga'] = adata.obs['is_tcga'].astype('category')
+    unprocessed_adata.obs['is_tcga'] = unprocessed_adata.obs['is_tcga'].astype('category')
+
+    # Start time tracking
+    start = time.time()
+    
+    # Define metric dictionary
+    metric_dict = {}
+
+    # Compute metrics
+    metric_dict['GC'] = scib.metrics.graph_connectivity(adata, label_key='tissue_txt')
+    metric_dict['ILISI_GRAPH'] = scib.metrics.ilisi_graph(adata, batch_key='is_tcga', type_='full', n_cores=-1)
+    metric_dict['PCR'] = scib.metrics.pcr_comparison(unprocessed_adata, adata, covariate='is_tcga')
+    metric_dict['SIL_BATCH'] = scib.metrics.silhouette_batch(adata, batch_key='is_tcga', label_key='tissue_txt', embed="X_pca", verbose=False)
+    # metric_dict['KBET'] = scib.metrics.kBET(adata, batch_key='is_tcga', label_key='tissue_txt', type_="full", embed="X_pca")
+    
+    # Print time elapsed
+    print(f'Computed batch correction metrics in {time.time() - start:.2f} seconds')
+
+    # Get list of the values of the metrics
+    metric_values = list(metric_dict.values())
+    # Add the mean of the values to the dictionary
+    metric_dict['CORRECTION_MEAN'] = np.mean(metric_values)
+
+    return metric_dict
