@@ -4,5 +4,5 @@
     "epochs": 50,         
     "mode": "train",
     "cuda": "2",    
-    "exp_name": "wang_test"   
+    "exp_name": "recount3_test"   
 }
