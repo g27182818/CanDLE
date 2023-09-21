@@ -1,12 +1,7 @@
-from sklearn.svm import LinearSVC
-from thundersvm import OneClassSVM, SVC
-from sklearn.linear_model import SGDClassifier
-from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
+from thundersvm import SVC
 from sklearn.metrics import classification_report
 import os
 import pylab
-import string
 import time
 # Import auxiliary functions
 from utils import *
@@ -37,13 +32,13 @@ os.makedirs(os.path.join(bias_directory, args.exp_name), exist_ok=True)
 # Start timer
 start = time.time()
 
-# Obtain dataset depending on the source
+# Obtain dataset depending on the args specified source
 dataset = get_dataset_from_args(args)
 # Set wang level to 0, and batch norm to false to obtain unprocessed data
 prev_wang_level = args.wang_level
 prev_batch_norm = args.batch_norm
 args.wang_level = 0
-args.batch_norm = False
+args.batch_norm = 'None'
 unprocessed_dataset = get_dataset_from_args(args)
 # Restore wang level
 args.wang_level = prev_wang_level
@@ -76,27 +71,23 @@ with open(os.path.join(bias_directory, args.exp_name, f'bias_log.txt'), 'a') as 
         print_both('\n'.join(['{0}: {1}'.format(met, metrics_dict[met]) for met in metrics_dict]), f)
 
 
-# FIXME: For now ignoring SVM part to make fast experiments
-if False:
-    # Get a split of the zero fold
-    split_dict = dataset.get_batch_split(fold=0)
+# Get a split of the zero fold
+split_dict = dataset.get_batch_split(fold=0)
 
-    # Declare and fit linear Support Vector Machine
-    # TODO: Apply 5 fold cross validation
-    # TODO: Use right the one class SVM
-    # clf = OneClassSVM(kernel='linear', verbose=True, max_iter=-1, tol=1e-4)
-    clf = SVC(kernel='linear', verbose=True, max_iter=-1, tol=1e-4)
-    print('The linear SVM fit may take several minutes...')
-    clf.fit(split_dict['x']['train'].T, split_dict['y']['train']) 
+# Declare and fit linear Support Vector Machine
+# TODO: Apply 5 fold cross validation
+clf = SVC(kernel='linear', degree=1, verbose=True, max_iter=-1, tol=1e-4)
+print('The linear SVM fit may take several minutes...')
+clf.fit(split_dict['x']['train'].T, split_dict['y']['train']) 
 
-    # Get predictions
-    y_pred = clf.predict(split_dict['x']['test'].T)
+# Get predictions
+y_pred = clf.predict(split_dict['x']['test'].T)
 
-    # Print the classification output
-    bias_directory = os.path.join('results', 'bias_check')
-    os.makedirs(os.path.join(bias_directory, args.exp_name), exist_ok=True)
+# Print the classification output
+bias_directory = os.path.join('results', 'bias_check')
+os.makedirs(os.path.join(bias_directory, args.exp_name), exist_ok=True)
 
-    with open(os.path.join(bias_directory, args.exp_name, f'bias_log.txt'), 'a') as f:
+with open(os.path.join(bias_directory, args.exp_name, f'bias_log.txt'), 'a') as f:
         print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
         print_both('\n\n',f)
         print_both(classification_report(split_dict['y']['test'], y_pred), f)

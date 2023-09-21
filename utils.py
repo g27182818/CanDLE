@@ -11,7 +11,7 @@ import matplotlib.colors as colors
 from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap
 import pylab
-from datasets import *
+from datasets import ToilDataset, WangDataset, Recount3Dataset
 
 # Set figure fontsizes
 params = {'legend.fontsize': 'large',
@@ -38,7 +38,7 @@ def get_general_parser():
     parser.add_argument('--sample_frac',    type=float,     default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
     parser.add_argument('--gene_list_csv',  type=str,       default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
     parser.add_argument('--wang_level',     type=int,       default=0,              help="Level of wang processing (0: Do not perform any wang processing, 1: Leave only paired samples, 2: Quantile normalization, 3: ComBat)",                                                            choices=[0, 1, 2, 3])
-    parser.add_argument('--batch_norm',     type=str2bool,  default=False,          help="If true, performs z-score normalization in each batch separately.")
+    parser.add_argument('--batch_norm',     type=str,       default='None',         help="The amount of z-score normalization in each batch separately. Can be 'None', 'mean', 'std', 'both'",                                                                                              choices=['None', 'mean', 'std', 'both'])
     parser.add_argument('--fold_number',    type=int,       default=5,              help="The number of folds to use in stratified k-fold cross-validation. Minimum 2. In general more than 5 can cause errors.")
     parser.add_argument('--seed',           type=int,       default=0,              help="Partition seed to divide tha data. Default is 0.")
 
@@ -427,6 +427,11 @@ def print_final_performance(fold_performance, path):
 
     # Get the final epoch whose results we are plotting
     final_epoch = len(fold_performance[0]['test'])
+    
+    # Define finel print strings
+    macc_str = f'{round(100*print_df["mean_acc"].loc["Mean"], 1)} ± {round(100*print_df["mean_acc"].loc["Std"], 1)}'
+    tot_acc_str = f'{round(100*print_df["tot_acc"].loc["Mean"], 1)} ± {round(100*print_df["tot_acc"].loc["Std"], 1)}'
+    mean_AP_str = f'{round(100*print_df["mean_AP"].loc["Mean"], 1)} ± {round(100*print_df["mean_AP"].loc["Std"], 1)}'
 
     # Open log file and print
     with open(path, 'a') as f:
@@ -434,6 +439,10 @@ def print_final_performance(fold_performance, path):
         print_both('\n', f)
         print_both(f'General results at epoch {final_epoch}:', f)
         print_both(print_df, f)
+        print_both('\n', f)
+        print_both(f'Final performance = {macc_str}, {tot_acc_str}, {mean_AP_str}', f)
+        
+
 
 
 def get_final_performance_df(fold_performance):
@@ -528,6 +537,7 @@ def get_dataset_from_args(args):
         raise ValueError('Invalid source argument. Valid arguments are: toil, wang, recount3')
     
     return dataset
+
 
 def plot_training(fold_performance, save_path):
     """

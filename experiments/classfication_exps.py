@@ -3,7 +3,7 @@ import subprocess
 import os
 
 """
-This code runs experiments to check the bias, batch correction performance and biological signal performance of various versions of the processed datasets.
+This code runs classification experiments using CanDLE over various versions of the processed datasets.
 The expreiments are run for all the datasets (wang, toil and recount3) and all the processing levels (0, 1, 2, 3, 4, 5, 6). The description of the processing
 is as follows:
 
@@ -23,18 +23,15 @@ Level 6: We do the same as in level 4 but we do both the std and mean correction
          to each batch separately.
 """
 
-
 datasets = ['wang', 'toil', 'recount3']
-# processing_levels = [0, 1, 2, 3, 4, 5, 6]
-# FIXME: This is done now for rapid testing the above line should be uncommented in real experiments
-processing_levels = [5]
+processing_levels = [0, 1, 2, 3, 4, 5, 6]
 
 # Iterate over datasets
 for dataset in datasets:
-    
+
     # Iterate over processing levels
     for lev in processing_levels:
-        
+
         ### Get all the relevant config files
         
         # Read dataset config
@@ -42,11 +39,11 @@ for dataset in datasets:
             dataset_config = json.load(f)
         
         # Read model config
-        with open(os.path.join('configs', 'models', f'config_bias.json'), 'r') as f:
+        with open(os.path.join('configs', 'models', f'config_classification.json'), 'r') as f:
             model_config = json.load(f)
 
         # Read training config
-        with open(os.path.join('configs', 'training', f'config_bias.json'), 'r') as f:
+        with open(os.path.join('configs', 'training', f'config_classification.json'), 'r') as f:
             training_config = json.load(f)
         
         # Unify config params
@@ -72,17 +69,17 @@ for dataset in datasets:
             config_params['batch_norm'] = 'both'
 
         # Modify experiment name
-        config_params['exp_name'] = f'{dataset}_level_{lev}'
+        config_params['exp_name'] = os.path.join('classification_exps', f'{dataset}_level_{lev}')
 
         # Start building the command
-        command_list = ['python', 'bias_check.py']
+        command_list = ['python', 'main.py']
 
         # Add all the config params
         for key, val in config_params.items():
             command_list.append(f'--{key}')
             command_list.append(f'{val}')
 
-        print(f'Doing bias check for {dataset} at processing level {lev}...')
+        print(f'Doing classification for {dataset} at processing level {lev}...')
 
         # Call subprocess
         subprocess.call(command_list)

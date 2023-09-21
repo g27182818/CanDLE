@@ -37,33 +37,8 @@ else:
     binary_dict = {label: 0 for label in complete_label_list}
     binary_dict[args.all_vs_one] = 1
 
-# Declare dataset depending on the source
-if args.source == 'toil':
-    dataset = ToilDataset(  os.path.join('data', 'toil_data'),          dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict=binary_dict,
-                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
-                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                            partition_seed = args.seed,                 force_compute = False)
-
-elif args.source == 'wang':
-    dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict=binary_dict,
-                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
-                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                            partition_seed = args.seed,                 force_compute = False)
-
-elif args.source == 'recount3':
-    dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
-                            tissue = args.tissue,                       binary_dict=binary_dict,
-                            mean_thr = args.mean_thr,                   std_thr = args.std_thr,
-                            rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
-                            gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                            batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                            partition_seed = args.seed,                 force_compute = False)
+# Obtain dataset depending on the args specified source
+dataset = get_dataset_from_args(args)
     
 # Calculate loss function weights
 distribution = np.bincount(np.ravel(dataset.label_df['lab_num']).astype(np.int64))

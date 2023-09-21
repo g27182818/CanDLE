@@ -510,11 +510,11 @@ class gtex_tcga_dataset():
 
     # This function performs a data normalization by batches (GTEX or TCGA) 
     def batch_normalize(self):
-        if self.batch_normalization==False:
+        if self.batch_normalization=='None':
             print('Did not perform batch normalization...')
             return
         else:
-            print('Batch normalizing matrix data...')
+            print(f'Batch normalizing matrix data with {self.batch_normalization}...')
             start = time.time()
             # Get the identifiers of the samples in each subset
             gtex_samples = self.label_df[self.label_df['is_tcga']==False].index
@@ -530,9 +530,17 @@ class gtex_tcga_dataset():
             gtex_columns = gtex_data.columns
             tcga_columns = tcga_data.columns
 
+            # Define boolean variables to indicate if mean or std normalization is to be performed
+            bool_mean, bool_std = False, False
+            # Handle the cases of mean, std or both
+            if (self.batch_normalization == 'mean') or (self.batch_normalization == 'both'):
+                bool_mean = True
+            if (self.batch_normalization == 'std') or (self.batch_normalization == 'both'):
+                bool_std = True
+            
             # Apply standardization to each subset
-            normalized_gtex_data = StandardScaler().fit_transform(gtex_data.T).T
-            normalized_tcga_data = StandardScaler().fit_transform(tcga_data.T).T
+            normalized_gtex_data = StandardScaler(with_mean=bool_mean, with_std=bool_std).fit_transform(gtex_data.T).T
+            normalized_tcga_data = StandardScaler(with_mean=bool_mean, with_std=bool_std).fit_transform(tcga_data.T).T
             
             # Create dataframes from the normalized data
             normalized_gtex_df = pd.DataFrame(normalized_gtex_data, index=gtex_index, columns=gtex_columns)
