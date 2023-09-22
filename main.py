@@ -139,9 +139,8 @@ if (args.mode == "train") or (args.mode == 'both'):
     # Generate confusion matrices plot and save it to conf_matrix_fig_path
     plot_conf_matrix(fold_performance, dataset.lab_txt_2_lab_num, path_dict['conf_matrix_fig'])
 
-    # Add a way to print the generalized performance over folds
-    print_final_performance(fold_performance, path_dict['train_log'])
-
+    # Get the final performance metrics df and save it into the results folder
+    final_performance_df = get_final_performance_df(fold_performance, path_dict['metrics'])
     
     # Plot PR curve if the problem is binary
     if dataset.num_classes == 2:

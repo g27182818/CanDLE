@@ -158,6 +158,9 @@ scalar_metrics_df = pd.DataFrame.from_dict(scalar_metrics, orient='index')
 scalar_metrics_df.loc['Mean'] = scalar_metrics_df.mean()
 scalar_metrics_df.loc['Std'] = scalar_metrics_df.std()
 
+# Save performance df to csv
+scalar_metrics_df.to_csv(path_dict['metrics'])
+
 # Define final print strings
 macc_str = f'{round(100*scalar_metrics_df["mean_acc"].loc["Mean"], 1)} ± {round(100*scalar_metrics_df["mean_acc"].loc["Std"], 1)}'
 tot_acc_str = f'{round(100*scalar_metrics_df["tot_acc"].loc["Mean"], 1)} ± {round(100*scalar_metrics_df["tot_acc"].loc["Std"], 1)}'

@@ -263,7 +263,6 @@ def test_hong_subtask(loader, model, device):
     
     return subtype_macc, pred_subtype
 
-
 def test_hong_with_standard_metrics(dataloader_dict, multitask_model, subtype_model, device):
     
     _, _, test_cancer_pred, test_tissue_pred = test_hong_multitask(dataloader_dict['multitask'][1], multitask_model, device)
@@ -308,7 +307,9 @@ def print_both(p_string, f):
     # f.write('\n')
     # print('\n', file=f)
     print(p_string, file=f)
-    
+
+# FIXME: Make better documentation
+# FIXME: Optimize invalid metrics handling. And function in general
 def print_epoch(train_dict, test_dict, loss, epoch, fold, path):
     """
     This function prints in terminal a table with all available metrics in all test groups (train, test) for an specific epoch.
@@ -350,95 +351,46 @@ def print_epoch(train_dict, test_dict, loss, epoch, fold, path):
         print_both(data_frame, f)
         print_both('\n', f)
     
-# TODO: Join this function with get_final_performance_df() 
-def print_final_performance(fold_performance, path):
+def get_final_performance_df(fold_performance: dict, path: str)-> pd.DataFrame:
+    """
+    This function takes a dictionary with the performance of each fold along all training epochs and returns a dataframe with
+    organized performance metrics along with mean and std over the folds.
 
+    Args:
+        fold_performance (dict): Dictionary with the performance of each fold along all training epochs.
+        path (str): Path to save the dataframe as csv file.
+
+    Returns:
+        pd.DataFrame: Dataframe with organized performance metrics along with mean and std over the folds.
+    """
     # Declare the invalid metrics for not considering them
     invalid_metrics = ['conf_matrix', 'AP_list', 'epoch', 'pr_curve', 'correct_prob_df', 'pr_df']
-    # Obtain a list of the metric dicts for test in the last epoch
-    final_test_list = [fold_performance[fold]['test'][-1] for fold in fold_performance.keys()]
-    # Obtain a list of the valid metrics
-    valid_metrics = [metric for metric in final_test_list[0].keys() if not(metric in invalid_metrics)]
-    # Declare empty metric matrix. It has first all the folds data and then the mean and std
-    metric_matrix = np.zeros((len(final_test_list), len(valid_metrics)))
-
-    # Assign data of each fold
-    for i in range(len(final_test_list)):
-        for j in range(len(valid_metrics)):
-            metric_matrix[i,j] = final_test_list[i][valid_metrics[j]]
     
-    # Get a matrix of various statistics of the folds
-    statistic_matrix = np.vstack((  np.ndarray.min(metric_matrix, axis=0, keepdims=True),
-                                    np.ndarray.max(metric_matrix, axis=0, keepdims=True),
-                                    np.mean(metric_matrix, axis=0, keepdims=True),
-                                    np.std(metric_matrix, axis=0, keepdims=True)))
+    # Delete from the fold performance all epochs except the last one
+    fold_performance_last_epoch = {fold: fold_dict['test'][-1] for fold, fold_dict in fold_performance.items()}
+    # Leave only the valid metrics
+    scalar_metrics = {fold: {k: v for k, v in fold_dict.items() if k not in invalid_metrics} for fold, fold_dict in fold_performance_last_epoch.items()}
     
-    # Obtain index and matrix for print data frame
-    index = [f'Fold {i+1}' for i in range(len(final_test_list))]
-    index.extend(['Min', 'Max', 'Mean', 'Std'])
-
-    metric_stats_matrix = np.vstack((metric_matrix, statistic_matrix))
+    # Create a dataframe with the scalar metrics
+    scalar_metrics_df = pd.DataFrame.from_dict(scalar_metrics, orient='index')
     
-    # Define printing dataframe
-    print_df = pd.DataFrame(metric_stats_matrix, index=index, columns=valid_metrics)
-    print_df.index.name = 'Measure'
+    # Compute mean and std for each metric and add them to the bottom of the dataframe
+    scalar_metrics_df.loc['Mean'] = scalar_metrics_df.mean()
+    scalar_metrics_df.loc['Std'] = scalar_metrics_df.std()
+    scalar_metrics_df.index.name = 'Measure'
 
-    # Get the final epoch whose results we are plotting
-    final_epoch = len(fold_performance[0]['test'])
-    
-    # Define finel print strings
-    macc_str = f'{round(100*print_df["mean_acc"].loc["Mean"], 1)} ± {round(100*print_df["mean_acc"].loc["Std"], 1)}'
-    tot_acc_str = f'{round(100*print_df["tot_acc"].loc["Mean"], 1)} ± {round(100*print_df["tot_acc"].loc["Std"], 1)}'
-    mean_AP_str = f'{round(100*print_df["mean_AP"].loc["Mean"], 1)} ± {round(100*print_df["mean_AP"].loc["Std"], 1)}'
+    # Save dataframe as csv file
+    scalar_metrics_df.to_csv(path)
 
-    # Open log file and print
-    with open(path, 'a') as f:
-        print_both('-'*100, f)
-        print_both('\n', f)
-        print_both(f'General results at epoch {final_epoch}:', f)
-        print_both(print_df, f)
-        print_both('\n', f)
-        print_both(f'Final performance = {macc_str}, {tot_acc_str}, {mean_AP_str}', f)
-        
-def get_final_performance_df(fold_performance):
-    # Declare the invalid metrics for not considering them
-    invalid_metrics = ['conf_matrix', 'AP_list', 'epoch', 'pr_curve', 'correct_prob_df', 'pr_df']
-    # Obtain a list of the metric dicts for test in the last epoch
-    final_test_list = [fold_performance[fold]['test'][-1] for fold in fold_performance.keys()]
-    # Obtain a list of the valid metrics
-    valid_metrics = [metric for metric in final_test_list[0].keys() if not(metric in invalid_metrics)]
-    # Declare empty metric matrix. It has first all the folds data and then the mean and std
-    metric_matrix = np.zeros((len(final_test_list), len(valid_metrics)))
+    return scalar_metrics_df
 
-    # Assign data of each fold
-    for i in range(len(final_test_list)):
-        for j in range(len(valid_metrics)):
-            metric_matrix[i,j] = final_test_list[i][valid_metrics[j]]
-    
-    # Get a matrix of various statistics of the folds
-    statistic_matrix = np.vstack((  np.ndarray.min(metric_matrix, axis=0, keepdims=True),
-                                    np.ndarray.max(metric_matrix, axis=0, keepdims=True),
-                                    np.mean(metric_matrix, axis=0, keepdims=True),
-                                    np.std(metric_matrix, axis=0, keepdims=True)))
-    
-    # Obtain index and matrix for print data frame
-    index = [f'Fold {i+1}' for i in range(len(final_test_list))]
-    index.extend(['Min', 'Max', 'Mean', 'Std'])
-
-    metric_stats_matrix = np.vstack((metric_matrix, statistic_matrix))
-    
-    # Define printing dataframe
-    performance_df = pd.DataFrame(metric_stats_matrix, index=index, columns=valid_metrics)
-    performance_df.index.name = 'Measure'
-
-    return performance_df
-  
+# FIXME: Update documentation
 def get_paths(exp_name):
     results_path = os.path.join("results", exp_name)
     path_dict = {'results': results_path,
                  'train_log': os.path.join(results_path, "training_log.txt"),
                  'log': os.path.join(results_path, "log.txt"),
-                 'metrics': os.path.join(results_path, "metric_dicts.pickle"),
+                 'metrics': os.path.join(results_path, "metrics.csv"),
                  'train_fig': os.path.join(results_path, "training_performance.png"),
                  'conf_matrix_fig': os.path.join(results_path, "confusion_matrix"),
                  'violin_conf_fig': os.path.join(results_path, "violin_confidence.png"),
