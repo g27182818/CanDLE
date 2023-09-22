@@ -12,6 +12,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap
 import pylab
 from datasets import ToilDataset, WangDataset, Recount3Dataset
+from metrics import get_metrics
 
 # Set figure fontsizes
 params = {'legend.fontsize': 'large',
@@ -140,50 +141,7 @@ def test(loader, model, device, num_classes=34):
             count += 1
 
     # Results dictionary declaration
-    metric_result = {}
-    # Get predictions
-    pred = glob_prob.argmax(axis=1)
-    # Get confusion matrix
-    conf_matrix = sklearn.metrics.confusion_matrix(glob_true, pred, labels=np.arange(num_classes))
-    # Normalize confusion matrix by row
-    row_norm_conf_matrix = conf_matrix / np.sum(conf_matrix, axis=1, keepdims=True)
-    # Compute mean recall
-    mean_acc = np.mean(np.diag(row_norm_conf_matrix))
-    # Whole correctly classified cases
-    correct = np.sum(np.diag(conf_matrix))
-    tot_acc = correct / len(loader.dataset)
-    # Get binary GT matrix
-    # Handle a binary problem because sklearn.preprocessing.label_binarize gives a matrix with only one column and two are needed
-    if num_classes == 2:
-        binary_gt = np.zeros((glob_true.shape[0], 2))
-        binary_gt[np.arange(glob_true.shape[0]), glob_true] = 1
-        # Cast binary_gt to int
-        binary_gt = binary_gt.astype(int)
-        # If the problem is binary the PR curve and max f1 are obtained for the positive class
-        precision, recall, thresholds = sklearn.metrics.precision_recall_curve(glob_true, glob_prob[:, 1])
-        metric_result["pr_curve"] = precision, recall, thresholds
-        # Compute max F1 score
-        metric_result["max_f1"] = np.nanmax(2 * (precision * recall) / (precision + recall))
-        metric_result['pr_df'] = pd.DataFrame({'lab_num': glob_true, 'positive_prob': glob_prob[:, 1]})
-    else:
-        binary_gt = sklearn.preprocessing.label_binarize(glob_true, classes=np.arange(num_classes))
-    
-    AP_list = sklearn.metrics.average_precision_score(binary_gt, glob_prob, average=None)
-    mean_AP = np.mean(AP_list)
-    
-    # Compute the probabilities of taking the correct decision
-    correct_prob = glob_prob[np.arange(len(glob_prob)), glob_true]
-    # Make a dataframe of correct_prob and true label
-    correct_prob_df = pd.DataFrame({'lab_num': glob_true, 'correct_prob': correct_prob})
-
-
-    # Assign results
-    metric_result['mean_acc'] = mean_acc
-    metric_result['tot_acc'] = tot_acc
-    metric_result['conf_matrix'] = conf_matrix
-    metric_result['mean_AP'] = mean_AP
-    metric_result['AP_list'] = AP_list
-    metric_result['correct_prob_df'] = correct_prob_df
+    metric_result = get_metrics(glob_prob, glob_true)
 
     return metric_result
 
@@ -351,7 +309,6 @@ def print_both(p_string, f):
     # print('\n', file=f)
     print(p_string, file=f)
     
-
 def print_epoch(train_dict, test_dict, loss, epoch, fold, path):
     """
     This function prints in terminal a table with all available metrics in all test groups (train, test) for an specific epoch.
@@ -443,7 +400,6 @@ def print_final_performance(fold_performance, path):
         print_both('\n', f)
         print_both(f'Final performance = {macc_str}, {tot_acc_str}, {mean_AP_str}', f)
         
-
 def get_final_performance_df(fold_performance):
     # Declare the invalid metrics for not considering them
     invalid_metrics = ['conf_matrix', 'AP_list', 'epoch', 'pr_curve', 'correct_prob_df', 'pr_df']
@@ -477,7 +433,6 @@ def get_final_performance_df(fold_performance):
 
     return performance_df
   
-
 def get_paths(exp_name):
     results_path = os.path.join("results", exp_name)
     path_dict = {'results': results_path,
