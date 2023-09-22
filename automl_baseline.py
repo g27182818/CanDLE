@@ -5,6 +5,7 @@ import torch
 import h2o
 from h2o.automl import H2OAutoML
 import sys
+from datetime import datetime
 # Import auxiliary functions
 from utils import *
 from model import *
@@ -90,10 +91,10 @@ x = expression_data_h2o.columns
 x.remove(y)
 x.remove(fold_column)
 
-# Declare and perform algorithm training
+# Declare and perform algorithm training. As project name we use the date and time of the experiment
 aml = H2OAutoML(
     max_runtime_secs = args.max_time,
-    project_name = args.exp_name,
+    project_name = "experiment_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
     keep_cross_validation_predictions=True,
     exclude_algos=['StackedEnsemble'],
     verbosity='info',
