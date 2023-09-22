@@ -5,5 +5,5 @@
     "epochs": 50,         
     "mode": "train",
     "cuda": "3",    
-    "exp_name": "toil_automl_test"   
+    "exp_name": "recount3_automl_test"   
 }

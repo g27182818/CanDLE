@@ -27,7 +27,7 @@ Level 6: We do the same as in level 4 but we do both the std and mean correction
 datasets = ['wang', 'toil', 'recount3']
 # processing_levels = [0, 1, 2, 3, 4, 5, 6]
 # FIXME: This is done now for rapid testing the above line should be uncommented in real experiments
-processing_levels = [5]
+processing_levels = [6]
 
 # Iterate over datasets
 for dataset in datasets:
@@ -42,11 +42,11 @@ for dataset in datasets:
             dataset_config = json.load(f)
         
         # Read model config
-        with open(os.path.join('configs', 'models', f'config_bias.json'), 'r') as f:
+        with open(os.path.join('configs', 'models', f'config_automl.json'), 'r') as f:
             model_config = json.load(f)
 
         # Read training config
-        with open(os.path.join('configs', 'training', f'config_bias.json'), 'r') as f:
+        with open(os.path.join('configs', 'training', f'config_automl.json'), 'r') as f:
             training_config = json.load(f)
         
         # Unify config params
@@ -72,11 +72,10 @@ for dataset in datasets:
             config_params['batch_norm'] = 'both'
 
         # Modify experiment name
-        # FIXME: This should be similar to os.path.join('classification_exps', f'{dataset}_level_{lev}') but corrections need to be done inside bias_check.py
-        config_params['exp_name'] = f'{dataset}_level_{lev}'
+        config_params['exp_name'] = os.path.join('automl_exps', f'{dataset}_level_{lev}')
 
         # Start building the command
-        command_list = ['python', 'bias_check.py']
+        command_list = ['python', 'automl_baseline.py']
 
         # Add all the config params
         for key, val in config_params.items():

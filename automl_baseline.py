@@ -4,6 +4,7 @@ import os
 import torch
 import h2o
 from h2o.automl import H2OAutoML
+import sys
 # Import auxiliary functions
 from utils import *
 from model import *
@@ -102,28 +103,40 @@ aml = H2OAutoML(
 # Train all models 
 aml.train(x = x, y = y, fold_column=fold_column,  training_frame = expression_data_h2o)
 
+# Get AutoML event log
+log = aml.event_log
+# Get training timing info
+info = aml.training_info
+
 # Get detailed performance of leader model
 best_model = aml.leader
+h2o.save_model(model=best_model, path=path_dict['results'], force=True)
 
 # Get predictions of the best model in each fold
 preds = best_model.cross_validation_predictions()
 
-print(h2o.automl.get_leaderboard(aml))
+# Get the AutoML Leaderboard
+lb = aml.leaderboard
 
 # Define fold performance dictionary
 fold_performance = {}
 
 # Iterate over folds
 for i in range(args.fold_number):
+    
+    # Get the predictions of the fold
+    test_preds = preds[i].as_data_frame()
+    # Drop the predict column from the predictions
+    test_preds = test_preds.drop(columns=['predict'])
+    # Accumulate the predictions of the fold in a global dataframe
+    global_test_preds = test_preds if i==0 else global_test_preds.add(test_preds)
 
     # Get the indexes of the test samples of the fold
-    test_idx = folds[i]['test_index']
-    # Subset the predictions of the fold and get the ground truths
-    test_preds_fold = preds[i].as_data_frame().iloc[test_idx]
+    test_idx = folds[i]['test_index']    
+    # Subset the predictions to those only of the fold and get the ground truths
+    test_preds_fold = test_preds.iloc[test_idx]
     test_truth_fold = metadata.iloc[test_idx]['lab_num'].values
 
-    # Drop the predict column from the predictions
-    test_preds_fold = test_preds_fold.drop(columns=['predict'])
     # Map the column names to the numeric labels
     test_preds_fold.columns = test_preds_fold.columns.map(dataset.lab_txt_2_lab_num)
     # Sort the columns by the numeric labels
@@ -135,7 +148,7 @@ for i in range(args.fold_number):
 
 # Declare the invalid metrics for not considering them
 invalid_metrics = ['conf_matrix', 'AP_list', 'pr_curve', 'correct_prob_df', 'pr_df']
-
+# Get the scalar metrics for each fold
 scalar_metrics = {fold: {k: v for k, v in fold_dict.items() if k not in invalid_metrics} for fold, fold_dict in fold_performance.items()}
 
 # Create a dataframe with the scalar metrics
@@ -144,20 +157,29 @@ scalar_metrics_df = pd.DataFrame.from_dict(scalar_metrics, orient='index')
 scalar_metrics_df.loc['Mean'] = scalar_metrics_df.mean()
 scalar_metrics_df.loc['Std'] = scalar_metrics_df.std()
 
-# Define finel print strings
+# Define final print strings
 macc_str = f'{round(100*scalar_metrics_df["mean_acc"].loc["Mean"], 1)} ± {round(100*scalar_metrics_df["mean_acc"].loc["Std"], 1)}'
 tot_acc_str = f'{round(100*scalar_metrics_df["tot_acc"].loc["Mean"], 1)} ± {round(100*scalar_metrics_df["tot_acc"].loc["Std"], 1)}'
 mean_AP_str = f'{round(100*scalar_metrics_df["mean_AP"].loc["Mean"], 1)} ± {round(100*scalar_metrics_df["mean_AP"].loc["Std"], 1)}'
 
 # Open log file and print
 with open(path_dict['train_log'], 'a') as f:
+    print_both(f'AutoML training log:', f)
+    print_both(log, f)
+    print_both('\n', f)
+    print_both(f'AutoML training info:', f)
+    print_both(info, f)
     print_both('\n', f)
     print_both(f'Leaderboard of AuntoML (Ensembles excluded):', f)
-    print_both(h2o.automl.get_leaderboard(aml), f)
+    print_both(lb.head(rows=lb.nrows), f)
     print_both('\n', f)
     print_both(f'General results of AuntoML (Ensembles excluded):', f)
     print_both(scalar_metrics_df, f)
     print_both('\n', f)
     print_both(f'Final performance = {macc_str}, {tot_acc_str}, {mean_AP_str}', f)
+
+# Save the predictions of the best model and the ground truths
+global_test_preds.to_csv(path_dict['predictions'])
+metadata.to_csv(path_dict['groundtruths'])
 
 h2o.cluster().shutdown()

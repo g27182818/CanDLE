@@ -26,6 +26,7 @@ args = parser.parse_args()
 args_dict = vars(args)
 
 # Print the classification output
+# FIXME: All the paths should be centralized in the get_paths function from utils.py
 bias_directory = os.path.join('results', 'bias_check')
 os.makedirs(os.path.join(bias_directory, args.exp_name), exist_ok=True)
 
@@ -82,10 +83,6 @@ clf.fit(split_dict['x']['train'].T, split_dict['y']['train'])
 
 # Get predictions
 y_pred = clf.predict(split_dict['x']['test'].T)
-
-# Print the classification output
-bias_directory = os.path.join('results', 'bias_check')
-os.makedirs(os.path.join(bias_directory, args.exp_name), exist_ok=True)
 
 with open(os.path.join(bias_directory, args.exp_name, f'bias_log.txt'), 'a') as f:
         print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)

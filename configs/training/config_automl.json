@@ -1,9 +1,9 @@
 {
-    "max_time": -1,
+    "max_time": 7200,
     "lr": 0.00001,
     "batch_size": 100,     
-    "epochs": 50,         
+    "epochs": 20,         
     "mode": "train", 
-    "cuda": "1",   
+    "cuda": "2",   
     "exp_name": "None"   
 }

@@ -490,7 +490,10 @@ def get_paths(exp_name):
                  'rankings': os.path.join('rankings'),
                  '1_ranking': os.path.join('rankings','1_candle_ranking.csv'),
                  'figures': os.path.join('figures'),
-                 'weights_demo_fig': os.path.join('figures','random_class_weights_plot.png')}
+                 'weights_demo_fig': os.path.join('figures','random_class_weights_plot.png'),
+                 'predictions': os.path.join(results_path, "predictions.csv"),
+                 'groundtruths': os.path.join(results_path, "groundtruth.csv"),
+                 }
     
     return path_dict
 
