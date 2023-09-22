@@ -1,5 +1,5 @@
 {
-    "source": "recount3",
+    "source": "toil",
     "dataset": "both",
     "tissue": "all", 
     "all_vs_one": "False",
@@ -9,7 +9,7 @@
     "sample_frac": 0.99,   
     "gene_list_csv": "None",
     "wang_level": 3,     
-    "batch_norm": true, 
+    "batch_norm": "both", 
     "fold_number": 5,     
     "seed": 0     
 }

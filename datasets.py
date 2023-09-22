@@ -107,7 +107,7 @@ class gtex_tcga_dataset():
         # Make mapper files if they are not already saved
         self.make_mappers()
         
-        # Read data from the Recount3 dataset and perform a log2(x+1) transformation. Also return gene metadata that is only available for Recount3
+        # Read data from the dataset and perform a log2(x+1) transformation.
         self.matrix_data, self.categories = self.read_func(self.path, self.force_compute)
         
         # Make dataset directory if it does not exist

@@ -47,6 +47,7 @@ def get_general_parser():
     parser.add_argument('--weights',        type=str2bool,  default=True,           help="Wether to train CanDLE with weighted cross entropy")
 
     # Train parameters
+    parser.add_argument('--max_time',       type=int,       default=60,             help="Maximum time in seconds that the autoML baseline can use for a run. Just used for the autoML baseline.")
     parser.add_argument('--lr',             type=float,     default=0.00001,        help="Learning rate")
     parser.add_argument('--batch_size',     type=int,       default=100,            help="Batch size")
     parser.add_argument('--epochs',         type=int,       default=20,             help="Number of epochs")
@@ -442,8 +443,6 @@ def print_final_performance(fold_performance, path):
         print_both('\n', f)
         print_both(f'Final performance = {macc_str}, {tot_acc_str}, {mean_AP_str}', f)
         
-
-
 
 def get_final_performance_df(fold_performance):
     # Declare the invalid metrics for not considering them

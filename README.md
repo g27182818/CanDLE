@@ -157,6 +157,7 @@ pip install scib
 pip install pynndescent
 # conda install -c conda-forge r-base # May take several minutes. Just used in case of kBET
 # pip install rpy2 # Just used in case of kBET
+pip install h2o
 ```
 
 FIXME: kBET is not used right now. Don't do this.
