@@ -482,6 +482,7 @@ def get_paths(exp_name):
     results_path = os.path.join("results", exp_name)
     path_dict = {'results': results_path,
                  'train_log': os.path.join(results_path, "training_log.txt"),
+                 'log': os.path.join(results_path, "log.txt"),
                  'metrics': os.path.join(results_path, "metric_dicts.pickle"),
                  'train_fig': os.path.join(results_path, "training_performance.png"),
                  'conf_matrix_fig': os.path.join(results_path, "confusion_matrix"),

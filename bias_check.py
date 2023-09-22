@@ -25,10 +25,9 @@ parser = get_general_parser()
 args = parser.parse_args()
 args_dict = vars(args)
 
-# Print the classification output
-# FIXME: All the paths should be centralized in the get_paths function from utils.py
-bias_directory = os.path.join('results', 'bias_check')
-os.makedirs(os.path.join(bias_directory, args.exp_name), exist_ok=True)
+# Declare all the saving paths needed
+path_dict = get_paths(args.exp_name)
+os.makedirs(path_dict['results'], exist_ok=True)
 
 # Start timer
 start = time.time()
@@ -64,7 +63,7 @@ metrics_dict = {**batch_metrics_dict, **biological_metrics_dict}
 # Compute global score and add it to the dictionary
 metrics_dict['GLOBAL_SCORE'] = 0.6*metrics_dict['BIOLOGICAL_MEAN'] + 0.4*metrics_dict['CORRECTION_MEAN']
 
-with open(os.path.join(bias_directory, args.exp_name, f'bias_log.txt'), 'a') as f:
+with open(path_dict['log'], 'a') as f:
         print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
         print_both('\n\n',f)
         print_both(f'\nTotal time to get integration metrics: {time.time() - start:.2f} seconds',f)
@@ -84,7 +83,7 @@ clf.fit(split_dict['x']['train'].T, split_dict['y']['train'])
 # Get predictions
 y_pred = clf.predict(split_dict['x']['test'].T)
 
-with open(os.path.join(bias_directory, args.exp_name, f'bias_log.txt'), 'a') as f:
+with open(path_dict['log'], 'a') as f:
         print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
         print_both('\n\n',f)
         print_both(classification_report(split_dict['y']['test'], y_pred), f)

@@ -72,8 +72,7 @@ for dataset in datasets:
             config_params['batch_norm'] = 'both'
 
         # Modify experiment name
-        # FIXME: This should be similar to os.path.join('classification_exps', f'{dataset}_level_{lev}') but corrections need to be done inside bias_check.py
-        config_params['exp_name'] = f'{dataset}_level_{lev}'
+        config_params['exp_name'] = os.path.join('bias_exps', f'{dataset}_level_{lev}')
 
         # Start building the command
         command_list = ['python', 'bias_check.py']
