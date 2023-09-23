@@ -147,7 +147,6 @@ def get_biological_conservation_metrics(adata: ad.AnnData, unprocessed_adata: ad
     metric_dict['NMI'] = scib.metrics.nmi(adata, label_key='tissue_txt', cluster_key='cluster')
     metric_dict['ASW'] = scib.metrics.isolated_labels_asw(adata, label_key="tissue_txt", batch_key='is_tcga', embed="X_pca", verbose=False, scale=True)
     metric_dict['SIL'] = scib.metrics.silhouette(adata, label_key='tissue_txt', embed="X_pca", scale=True)
-    metric_dict['CLISI'] = scib.metrics.clisi_graph(adata, label_key='tissue_txt', type_='full', n_cores=-1, scale=True)
     metric_dict['IL_F1'] = scib.metrics.isolated_labels_f1(adata, label_key="tissue_txt", batch_key='is_tcga', embed=None, verbose=False)
 
     # Print time elapsed
@@ -156,6 +155,8 @@ def get_biological_conservation_metrics(adata: ad.AnnData, unprocessed_adata: ad
     # NOTE: The trajectory conservation metric is not computed here because it is not applicable to bulk RNASeq data.
     # NOTE: Cell cycle conservation is also not computed because it estimates a cell cycle phase for each sample and then computes the variance contribution
     #       of each cycle phase to the global batch or dataset. A cell cycle phase estimation should not be done over bulk RNS-Seq as it contain hundreds to thousands of cells.
+    # NOTE: CLISI metric is not implemented since it can only take 2 values (0 and 1) when there are 2 batches. So it's not very granullar for our problem. Besides we don't
+    # ovserve any variation in it with any processing
 
     # Get list of the values of the metrics
     metric_values = list(metric_dict.values())
@@ -195,13 +196,15 @@ def get_batch_correction_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnDat
 
     # Compute metrics
     metric_dict['GC'] = scib.metrics.graph_connectivity(adata, label_key='tissue_txt')
-    metric_dict['ILISI_GRAPH'] = scib.metrics.ilisi_graph(adata, batch_key='is_tcga', type_='full', n_cores=-1)
     metric_dict['PCR'] = scib.metrics.pcr_comparison(unprocessed_adata, adata, covariate='is_tcga')
     metric_dict['SIL_BATCH'] = scib.metrics.silhouette_batch(adata, batch_key='is_tcga', label_key='tissue_txt', embed="X_pca", verbose=False)
     # metric_dict['KBET'] = scib.metrics.kBET(adata, batch_key='is_tcga', label_key='tissue_txt', type_="full", embed="X_pca")
     
     # Print time elapsed
     print(f'Computed batch correction metrics in {time.time() - start:.2f} seconds')
+
+    # NOTE: ILISI_GRAPH metric is not implemented since it can only take 2 values (0 and 1) when there are 2 batches. So it's not very granullar for our problem. Besides we don't
+    # ovserve any variation in it with any processing
 
     # Get list of the values of the metrics
     metric_values = list(metric_dict.values())
