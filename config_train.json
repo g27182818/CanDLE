@@ -4,6 +4,7 @@
     "batch_size": 100,   
     "epochs": 50,         
     "mode": "train",
-    "cuda": "3",    
-    "exp_name": "recount3_automl_test"   
+    "cuda": "3",
+    "integration_metrics": "both",
+    "exp_name": "recount3_automl_test"
 }

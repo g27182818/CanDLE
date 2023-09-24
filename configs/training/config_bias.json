@@ -4,6 +4,7 @@
     "batch_size": 100,     
     "epochs": 20,         
     "mode": "train", 
-    "cuda": "2",   
+    "cuda": "0",
+    "integration_metrics": "svm",  
     "exp_name": "None"   
 }

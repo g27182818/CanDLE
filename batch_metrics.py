@@ -6,6 +6,8 @@ import warnings
 import numpy as np
 import time
 
+# FIXME: Add these metrics to the metrics script
+
 # FIlter intern numba umap warning that I could not fix
 # TODO: Fix this warning
 warnings.filterwarnings("ignore", message="The 'nopython' keyword argument was not supplied to the 'numba.jit' decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.")

@@ -25,40 +25,44 @@ pylab.rcParams.update(params)
 # Auxiliary function to use booleans in parser
 str2bool = lambda x: (str(x).lower() == 'true')
 
+# TODO: Add documentation
 def get_general_parser():
     parser = argparse.ArgumentParser(description='Code for CanDLE implementation.')
     
     # Dataset parameters
-    parser.add_argument('--source',         type=str,       default="toil",         help="Data source to use",                                                                                                                                                                              choices=["toil", "wang","recount3"])
-    parser.add_argument('--dataset',        type=str,       default="both",         help="Dataset to use",                                                                                                                                                                                  choices=["both", "tcga", "gtex"])
-    parser.add_argument('--tissue',         type=str,       default="all",          help="Tissue to use from data. Note that the choices for source wang are limited by the available classes.",                                                                                                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
-    parser.add_argument('--all_vs_one',     type=str,       default='False',        help="If False solves a multi-class problem, if other string solves a binary problem with this as the positive class. Note that the choices for source wang are limited by the available classes.",     choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
-    parser.add_argument('--mean_thr',       type=float,     default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression strictly greater.")
-    parser.add_argument('--std_thr',        type=float,     default=0.01,           help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std strictly greater.")
-    parser.add_argument('--rand_frac',      type=float,     default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
-    parser.add_argument('--sample_frac',    type=float,     default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
-    parser.add_argument('--gene_list_csv',  type=str,       default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
-    parser.add_argument('--wang_level',     type=int,       default=0,              help="Level of wang processing (0: Do not perform any wang processing, 1: Leave only paired samples, 2: Quantile normalization, 3: ComBat)",                                                            choices=[0, 1, 2, 3])
-    parser.add_argument('--batch_norm',     type=str,       default='None',         help="The amount of z-score normalization in each batch separately. Can be 'None', 'mean', 'std', 'both'",                                                                                              choices=['None', 'mean', 'std', 'both'])
-    parser.add_argument('--fold_number',    type=int,       default=5,              help="The number of folds to use in stratified k-fold cross-validation. Minimum 2. In general more than 5 can cause errors.")
-    parser.add_argument('--seed',           type=int,       default=0,              help="Partition seed to divide tha data. Default is 0.")
+    parser.add_argument('--source',                 type=str,       default="toil",         help="Data source to use",                                                                                                                                                                              choices=["toil", "wang","recount3"])
+    parser.add_argument('--dataset',                type=str,       default="both",         help="Dataset to use",                                                                                                                                                                                  choices=["both", "tcga", "gtex"])
+    parser.add_argument('--tissue',                 type=str,       default="all",          help="Tissue to use from data. Note that the choices for source wang are limited by the available classes.",                                                                                                                                                                         choices=['all', 'Bladder', 'Blood', 'Brain', 'Breast', 'Cervix', 'Colon', 'Connective', 'Esophagus', 'Kidney', 'Liver', 'Lung', 'Not Paired', 'Ovary', 'Pancreas', 'Prostate', 'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'])
+    parser.add_argument('--all_vs_one',             type=str,       default='False',        help="If False solves a multi-class problem, if other string solves a binary problem with this as the positive class. Note that the choices for source wang are limited by the available classes.",     choices=['False', 'GTEX-ADI', 'GTEX-ADR_GLA', 'GTEX-BLA', 'GTEX-BLO', 'GTEX-BLO_VSL', 'GTEX-BRA', 'GTEX-BRE', 'GTEX-CER', 'GTEX-COL', 'GTEX-ESO', 'GTEX-FAL_TUB', 'GTEX-HEA', 'GTEX-KID', 'GTEX-LIV', 'GTEX-LUN', 'GTEX-MUS', 'GTEX-NER', 'GTEX-OVA', 'GTEX-PAN', 'GTEX-PIT', 'GTEX-PRO', 'GTEX-SAL_GLA', 'GTEX-SKI', 'GTEX-SMA_INT', 'GTEX-SPL', 'GTEX-STO', 'GTEX-TES', 'GTEX-THY', 'GTEX-UTE', 'GTEX-VAG', 'TCGA-ACC', 'TCGA-BLCA', 'TCGA-BRCA', 'TCGA-CESC', 'TCGA-CHOL', 'TCGA-COAD', 'TCGA-DLBC', 'TCGA-ESCA', 'TCGA-GBM', 'TCGA-HNSC', 'TCGA-KICH', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-LAML', 'TCGA-LGG', 'TCGA-LIHC', 'TCGA-LUAD', 'TCGA-LUSC', 'TCGA-MESO', 'TCGA-OV', 'TCGA-PAAD', 'TCGA-PCPG', 'TCGA-PRAD', 'TCGA-READ', 'TCGA-SARC', 'TCGA-SKCM', 'TCGA-STAD', 'TCGA-TGCT', 'TCGA-THCA', 'TCGA-THYM', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-UVM'])
+    parser.add_argument('--mean_thr',               type=float,     default=-10.0,          help="Mean threshold to filter out genes in initial toil data. Genes accepted have mean expression strictly greater.")
+    parser.add_argument('--std_thr',                type=float,     default=0.01,           help="Standard deviation threshold to filter out genes in initial toil data. Genes accepted have std strictly greater.")
+    parser.add_argument('--rand_frac',              type=float,     default=1.0,            help="Select a random fraction of the genes that survive the mean and std filtering.")
+    parser.add_argument('--sample_frac',            type=float,     default=0.0,            help="Filter out genes that are not expressed in at least this fraction of both the GTEx and TCGA data.")
+    parser.add_argument('--gene_list_csv',          type=str,       default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
+    parser.add_argument('--wang_level',             type=int,       default=0,              help="Level of wang processing (0: Do not perform any wang processing, 1: Leave only paired samples, 2: Quantile normalization, 3: ComBat)",                                                            choices=[0, 1, 2, 3])
+    parser.add_argument('--batch_norm',             type=str,       default='None',         help="The amount of z-score normalization in each batch separately. Can be 'None', 'mean', 'std', 'both'",                                                                                              choices=['None', 'mean', 'std', 'both'])
+    parser.add_argument('--fold_number',            type=int,       default=5,              help="The number of folds to use in stratified k-fold cross-validation. Minimum 2. In general more than 5 can cause errors.")
+    parser.add_argument('--seed',                   type=int,       default=0,              help="Partition seed to divide tha data. Default is 0.")
+
+    # Integration check parameters
+    parser.add_argument('--integration_metrics',    type=str,       default='both',         help="The kinds of metrics to compute for the integration metrics. This flag is only used in the bias_check.py script. It can be changed in the training configurations file.",                         choices=['both', 'svm', 'scib'])
 
     # Model parameters
-    parser.add_argument('--sota',           type=str,       default='None',         help="Which sota model to run. 'None' for CanDLE")
-    parser.add_argument('--weights',        type=str2bool,  default=True,           help="Wether to train CanDLE with weighted cross entropy")
+    parser.add_argument('--sota',                   type=str,       default='None',         help="Which sota model to run. 'None' for CanDLE")
+    parser.add_argument('--weights',                type=str2bool,  default=True,           help="Wether to train CanDLE with weighted cross entropy")
 
     # Train parameters
-    parser.add_argument('--max_time',       type=int,       default=60,             help="Maximum time in seconds that the autoML baseline can use for a run. Just used for the autoML baseline.")
-    parser.add_argument('--lr',             type=float,     default=0.00001,        help="Learning rate")
-    parser.add_argument('--batch_size',     type=int,       default=100,            help="Batch size")
-    parser.add_argument('--epochs',         type=int,       default=20,             help="Number of epochs")
-    parser.add_argument('--mode',           type=str,       default="train",        help="Train, test or do both for a CanDLE model.",                                                                           choices=['train', 'test','both'])
-    parser.add_argument('--cuda',           type=str,       default="0",            help="Which cuda device to use. Should be an int.")
-    parser.add_argument('--exp_name',       type=str,       default='misc_test',    help="Experiment name to save")
-    
+    parser.add_argument('--max_time',               type=int,       default=60,             help="Maximum time in seconds that the autoML baseline can use for a run. Just used for the autoML baseline.")
+    parser.add_argument('--lr',                     type=float,     default=0.00001,        help="Learning rate")
+    parser.add_argument('--batch_size',             type=int,       default=100,            help="Batch size")
+    parser.add_argument('--epochs',                 type=int,       default=20,             help="Number of epochs")
+    parser.add_argument('--mode',                   type=str,       default="train",        help="Train, test or do both for a CanDLE model.",                                                                                                                                                      choices=['train', 'test','both'])
+    parser.add_argument('--cuda',                   type=str,       default="0",            help="Which cuda device to use. Should be an int.")
+    parser.add_argument('--exp_name',               type=str,       default='misc_test',    help="Experiment name to save")
+
     return parser
 
-
+# TODO: Update documentation format
 def train(train_loader, model, device, criterion, optimizer):
     """
     This function performs 1 training epoch in a graph classification model with the possibility of adversarial
@@ -101,7 +105,7 @@ def train(train_loader, model, device, criterion, optimizer):
     mean_loss = mean_loss/count
     return mean_loss
 
-
+# TODO: Update documentation format
 def test(loader, model, device, num_classes=34):
     """
     This function calculates a set of metrics using a model and its inputs.
@@ -145,6 +149,7 @@ def test(loader, model, device, num_classes=34):
 
     return metric_result
 
+# TODO: Add documentation
 # define train function multitask
 def train_hong_multitask(train_loader, model, device, cancer_criterion, tissue_criterion, optimizer):
     # Put model in train mode
@@ -177,6 +182,7 @@ def train_hong_multitask(train_loader, model, device, cancer_criterion, tissue_c
     mean_tissue_loss = mean_tissue_loss/count
     return mean_loss, mean_cancer_loss, mean_tissue_loss
 
+# TODO: Add documentation
 # define train function subtask
 def train_hong_subtask(train_loader, model, device, subtype_criterion, optimizer):
     # Put model in train mode
@@ -201,6 +207,7 @@ def train_hong_subtask(train_loader, model, device, subtype_criterion, optimizer
     mean_loss = mean_loss/count
     return mean_loss
 
+# TODO: Add documentation
 def test_hong_multitask(loader, model, device):
     # Put model in evaluation mode
     model.eval()
@@ -236,6 +243,7 @@ def test_hong_multitask(loader, model, device):
     
     return cancer_macc, tissue_macc, pred_cancer, pred_tissue
 
+# TODO: Add documentation
 def test_hong_subtask(loader, model, device):
     # Put model in evaluation mode
     model.eval()
@@ -263,6 +271,7 @@ def test_hong_subtask(loader, model, device):
     
     return subtype_macc, pred_subtype
 
+# TODO: Add documentation
 def test_hong_with_standard_metrics(dataloader_dict, multitask_model, subtype_model, device):
     
     _, _, test_cancer_pred, test_tissue_pred = test_hong_multitask(dataloader_dict['multitask'][1], multitask_model, device)
@@ -291,6 +300,7 @@ def test_hong_with_standard_metrics(dataloader_dict, multitask_model, subtype_mo
 
     return macc_standard_test, acc_standard_test
 
+# TODO: Update documentation format
 def print_both(p_string, f):
     """
     This function prints p_string in terminal and to a .txt file with handle f 

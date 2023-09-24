@@ -29,64 +29,70 @@ args_dict = vars(args)
 path_dict = get_paths(args.exp_name)
 os.makedirs(path_dict['results'], exist_ok=True)
 
-# Start timer
-start = time.time()
-
 # Obtain dataset depending on the args specified source
 dataset = get_dataset_from_args(args)
-# Set wang level to 0, and batch norm to false to obtain unprocessed data
-prev_wang_level = args.wang_level
-prev_batch_norm = args.batch_norm
-args.wang_level = 0
-args.batch_norm = 'None'
-unprocessed_dataset = get_dataset_from_args(args)
-# Restore wang level
-args.wang_level = prev_wang_level
-args.batch_norm = prev_batch_norm
 
-# Get adata from datasets
-adata = get_adata_from_dataset(dataset)
-unprocessed_adata = get_adata_from_dataset(unprocessed_dataset)
+# Handle the cases where to compute scib integration metrics
+if args.integration_metrics in ['scib', 'both']:                               
+        # Start timer
+        start = time.time()
+        # Set wang level to 0, and batch norm to false to obtain unprocessed data
+        prev_wang_level = args.wang_level
+        prev_batch_norm = args.batch_norm
+        args.wang_level = 0
+        args.batch_norm = 'None'
+        unprocessed_dataset = get_dataset_from_args(args)
+        # Restore wang level
+        args.wang_level = prev_wang_level
+        args.batch_norm = prev_batch_norm
 
-# Process adatas to compute batch metrics
-adata = process_adata(adata)
-unprocessed_adata = process_adata(unprocessed_adata)
+        # Get adata from datasets
+        adata = get_adata_from_dataset(dataset)
+        unprocessed_adata = get_adata_from_dataset(unprocessed_dataset)
 
-# Get batch correction metrics
-batch_metrics_dict = get_batch_correction_metrics(adata, unprocessed_adata)
-# Get biological metrics
-biological_metrics_dict = get_biological_conservation_metrics(adata, unprocessed_adata)
+        # Process adatas to compute batch metrics
+        adata = process_adata(adata)
+        unprocessed_adata = process_adata(unprocessed_adata)
 
-# Join both dictionaries
-metrics_dict = {**batch_metrics_dict, **biological_metrics_dict}
+        # Get batch correction metrics
+        batch_metrics_dict = get_batch_correction_metrics(adata, unprocessed_adata)
+        # Get biological metrics
+        biological_metrics_dict = get_biological_conservation_metrics(adata, unprocessed_adata)
 
-# Compute global score and add it to the dictionary
-metrics_dict['GLOBAL_SCORE'] = 0.6*metrics_dict['BIOLOGICAL_MEAN'] + 0.4*metrics_dict['CORRECTION_MEAN']
+        # Join both dictionaries
+        metrics_dict = {**batch_metrics_dict, **biological_metrics_dict}
 
-with open(path_dict['log'], 'a') as f:
-        print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
-        print_both('\n\n',f)
-        print_both(f'\nTotal time to get integration metrics: {time.time() - start:.2f} seconds',f)
-        print_both('\n\n',f)
-        print_both('\n'.join(['{0}: {1}'.format(met, metrics_dict[met]) for met in metrics_dict]), f)
+        # Compute global score and add it to the dictionary
+        metrics_dict['GLOBAL_SCORE'] = 0.6*metrics_dict['BIOLOGICAL_MEAN'] + 0.4*metrics_dict['CORRECTION_MEAN']
+
+        with open(path_dict['log'], 'a') as f:
+                print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
+                print_both('\n\n',f)
+                print_both(f'\nTotal time to get integration metrics: {time.time() - start:.2f} seconds',f)
+                print_both('\n\n',f)
+                print_both('\n'.join(['{0}: {1}'.format(met, metrics_dict[met]) for met in metrics_dict]), f)
+
+# Handle the cases where to compute svm integration metrics
+if args.integration_metrics in ['svm', 'both']:
+        # Get a split of the zero fold
+        split_dict = dataset.get_batch_split(fold=0)
+
+        # Declare and fit linear Support Vector Machine
+        clf = SVC(kernel='linear', degree=1, verbose=True, max_iter=-1, tol=1e-4)
+        print('The linear SVM fit may take several minutes...')
+        clf.fit(split_dict['x']['train'].T, split_dict['y']['train']) 
+
+        # Get predictions
+        y_pred = clf.predict(split_dict['x']['test'].T)
+
+        with open(path_dict['log'], 'a') as f:
+                print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
+                print_both('\n\n',f)
+                print_both(classification_report(split_dict['y']['test'], y_pred, digits=3), f)
 
 
-# Get a split of the zero fold
-split_dict = dataset.get_batch_split(fold=0)
 
-# Declare and fit linear Support Vector Machine
-# TODO: Apply 5 fold cross validation
-clf = SVC(kernel='linear', degree=1, verbose=True, max_iter=-1, tol=1e-4)
-print('The linear SVM fit may take several minutes...')
-clf.fit(split_dict['x']['train'].T, split_dict['y']['train']) 
 
-# Get predictions
-y_pred = clf.predict(split_dict['x']['test'].T)
-
-with open(path_dict['log'], 'a') as f:
-        print_both('\n'.join(['--{0} {1}'.format(arg, args_dict[arg]) for arg in args_dict]),f)
-        print_both('\n\n',f)
-        print_both(classification_report(split_dict['y']['test'], y_pred), f)
 
 
 # This is the old code with various valuable plots

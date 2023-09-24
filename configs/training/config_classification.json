@@ -4,6 +4,7 @@
     "batch_size": 100,     
     "epochs": 50,         
     "mode": "train", 
-    "cuda": "1",   
+    "cuda": "0",
+    "integration_metrics": "both",  
     "exp_name": "None"   
 }
