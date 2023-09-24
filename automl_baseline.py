@@ -28,6 +28,7 @@ parser = get_general_parser()
 args = parser.parse_args()
 args_dict = vars(args)
 
+# FIXME: Remove the part where we set cuda because this doesn't work with autoML
 # Set manual seeds and get cuda
 seed_everything(17)
 os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
@@ -91,6 +92,7 @@ x = expression_data_h2o.columns
 x.remove(y)
 x.remove(fold_column)
 
+# FIXME: Be able to include StackedEnsemble in the AutoML
 # Declare and perform algorithm training. As project name we use the date and time of the experiment
 aml = H2OAutoML(
     max_runtime_secs = args.max_time,

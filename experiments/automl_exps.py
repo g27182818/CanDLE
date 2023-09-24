@@ -25,9 +25,11 @@ Level 6: We do the same as in level 4 but we do both the std and mean correction
 
 
 datasets = ['wang', 'toil', 'recount3']
-# processing_levels = [0, 1, 2, 3, 4, 5, 6]
-# FIXME: This is done now for rapid testing the above line should be uncommented in real experiments
-processing_levels = [6]
+processing_levels = [0, 1, 2, 3, 4, 5, 6]
+
+# FIXME: Delete the following two lines they are just for rapid testing
+datasets = ['wang']
+processing_levels = [5]
 
 # Iterate over datasets
 for dataset in datasets:
@@ -82,7 +84,7 @@ for dataset in datasets:
             command_list.append(f'--{key}')
             command_list.append(f'{val}')
 
-        print(f'Doing bias check for {dataset} at processing level {lev}...')
+        print(f'Doing AutoML baselines for {dataset} at processing level {lev}...')
 
         # Call subprocess
         subprocess.call(command_list)
