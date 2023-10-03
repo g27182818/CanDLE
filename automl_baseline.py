@@ -16,8 +16,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# Start H2O API
-h2o.init()
+# Start H2O API. Set the number of cores to half of the available cores
+# FIXME: Return chancge to get al the cores
+h2o.init(nthreads=os.cpu_count()//2)
 
 # Set axis bellow for matplotlib
 plt.rcParams['axes.axisbelow'] = True
@@ -92,12 +93,12 @@ x = expression_data_h2o.columns
 x.remove(y)
 x.remove(fold_column)
 
-# FIXME: Be able to include StackedEnsemble in the AutoML
 # Declare and perform algorithm training. As project name we use the date and time of the experiment
 aml = H2OAutoML(
-    max_runtime_secs = args.max_time,
+    max_models = args.max_models,
     project_name = "experiment_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
     keep_cross_validation_predictions=True,
+    keep_cross_validation_models=True,
     exclude_algos=['StackedEnsemble'],
     verbosity='info',
     seed = 42,
