@@ -52,7 +52,6 @@ def get_general_parser():
     parser.add_argument('--weights',                type=str2bool,  default=True,           help="Wether to train CanDLE with weighted cross entropy")
 
     # Train parameters
-    parser.add_argument('--max_models',             type=int,       default=1,              help="Maximum number of models for autoML baseline to train. Just used for the autoML baseline.")
     parser.add_argument('--lr',                     type=float,     default=0.00001,        help="Learning rate")
     parser.add_argument('--batch_size',             type=int,       default=100,            help="Batch size")
     parser.add_argument('--epochs',                 type=int,       default=20,             help="Number of epochs")

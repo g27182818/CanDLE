@@ -2,10 +2,11 @@
 import numpy as np
 import os
 import torch
-import h2o
-from h2o.automl import H2OAutoML
-import sys
-from datetime import datetime
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import SGDClassifier
+from thundersvm import SVC
 # Import auxiliary functions
 from utils import *
 from model import *
@@ -16,9 +17,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# Start H2O API. Set the number of cores to half of the available cores
-# FIXME: Return chancge to get al the cores
-h2o.init(nthreads=os.cpu_count()//2)
 
 # Set axis bellow for matplotlib
 plt.rcParams['axes.axisbelow'] = True
@@ -29,7 +27,7 @@ parser = get_general_parser()
 args = parser.parse_args()
 args_dict = vars(args)
 
-# FIXME: Remove the part where we set cuda because this doesn't work with autoML
+
 # Set manual seeds and get cuda
 seed_everything(17)
 os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
@@ -71,56 +69,11 @@ for k, v in folds.items():
     # Add fold number to the fold matrix
     fold_matrix[test_idx] = k
 # Add fold matrix to a metadata column
-metadata['fold'] = fold_matrix
+metadata['fold'] = fold_matrix.astype(int)
+metadata.sort_index(inplace=True)
 
-# Add to the expression data the fold of each sample
-expression_data['fold'] = metadata['fold'].values
-# Add to the expression data the numeric label of each sample
-expression_data['lab_txt'] = metadata['lab_txt'].values
-
-# Cast the lab_txt column to string for H2O to recognize it as categorical
-expression_data['lab_txt'] = expression_data['lab_txt'].astype('str')
-
-# Dataframe declaration
-print('Parsing data to H2OFrame...')
-expression_data_h2o = h2o.H2OFrame(expression_data)
-
-# Declare name of dependent variable and fold column
-y = 'lab_txt'
-fold_column = 'fold'
-# Get the names of the columns that are not the dependent variable or the fold column
-x = expression_data_h2o.columns
-x.remove(y)
-x.remove(fold_column)
-
-# Declare and perform algorithm training. As project name we use the date and time of the experiment
-aml = H2OAutoML(
-    max_models = args.max_models,
-    project_name = "experiment_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-    keep_cross_validation_predictions=True,
-    keep_cross_validation_models=True,
-    exclude_algos=['StackedEnsemble'],
-    verbosity='info',
-    seed = 42,
-    )
-
-# Train all models 
-aml.train(x = x, y = y, fold_column=fold_column,  training_frame = expression_data_h2o)
-
-# Get AutoML event log
-log = aml.event_log
-# Get training timing info
-info = aml.training_info
-
-# Get detailed performance of leader model
-best_model = aml.leader
-h2o.save_model(model=best_model, path=path_dict['results'], force=True)
-
-# Get predictions of the best model in each fold
-preds = best_model.cross_validation_predictions()
-
-# Get the AutoML Leaderboard
-lb = aml.leaderboard
+# Prediction dataframe
+global_test_preds = pd.DataFrame(index=metadata.index, columns=dataset.lab_txt_2_lab_num.keys())
 
 # Define fold performance dictionary
 fold_performance = {}
@@ -128,26 +81,51 @@ fold_performance = {}
 # Iterate over folds
 for i in range(args.fold_number):
     
+    # Define the type of metod to use. Use default sklearn parameters for Decision Tree Classifier (dt),
+    # Random Forest Classifier (rf), Extra Trees Classifier (et), Support Vector Machine (svm), Stochastic Gradient Descent (sgd),
+    # K-Nearest Neighbors (knn).
+
+    if args.sota == 'dt':
+        clf =  DecisionTreeClassifier(random_state = 42)
+    elif args.sota == 'rf':
+        clf =  RandomForestClassifier(random_state = 42, n_jobs=-1)
+    elif args.sota == 'et':
+        clf =  ExtraTreesClassifier(random_state = 42, n_jobs=-1)
+    elif args.sota == 'svm':
+        clf =  SVC(kernel = 'rbf', random_state = 42, probability=True)
+    elif args.sota == 'sgd':
+        clf =  SGDClassifier(random_state = 42, n_jobs=-1, loss='log_loss')
+    elif args.sota == 'knn':
+        clf =  KNeighborsClassifier(n_jobs=-1)
+    else:
+        raise ValueError('The ml_method argument must be one of the following: dt, rf, et, svm, sgd, knn.')
+
+    # Get the train and test indexes of the fold
+    train_idx = metadata[metadata['fold']!=i].index
+    test_idx = metadata[metadata['fold']==i].index
+
+    # Get the train and test data of the fold
+    train_data = expression_data.loc[train_idx]
+    test_data = expression_data.loc[test_idx]
+
+    # Get the train and test labels of the fold
+    train_labels = metadata.loc[train_idx]['lab_num'].values
+    test_labels = metadata.loc[test_idx]['lab_num'].values
+
+    # Fit the model
+    clf.fit(train_data.values, train_labels)
+
     # Get the predictions of the fold
-    test_preds = preds[i].as_data_frame()
-    # Drop the predict column from the predictions
-    test_preds = test_preds.drop(columns=['predict'])
+    test_preds = clf.predict_proba(test_data.values)
+
+    # Get predictions in a dataframe
+    test_preds = pd.DataFrame(test_preds, index=test_idx, columns=dataset.lab_txt_2_lab_num.keys())
+    
     # Accumulate the predictions of the fold in a global dataframe
-    global_test_preds = test_preds if i==0 else global_test_preds.add(test_preds)
-
-    # Get the indexes of the test samples of the fold
-    test_idx = folds[i]['test_index']    
-    # Subset the predictions to those only of the fold and get the ground truths
-    test_preds_fold = test_preds.iloc[test_idx]
-    test_truth_fold = metadata.iloc[test_idx]['lab_num'].values
-
-    # Map the column names to the numeric labels
-    test_preds_fold.columns = test_preds_fold.columns.map(dataset.lab_txt_2_lab_num)
-    # Sort the columns by the numeric labels
-    test_preds_fold = test_preds_fold.reindex(sorted(test_preds_fold.columns), axis=1)
+    global_test_preds.loc[test_idx] = test_preds
 
     # Obtain test metrics for each epoch in all groups    
-    test_metrics = get_metrics(test_preds_fold, test_truth_fold)
+    test_metrics = get_metrics(test_preds, test_labels)
     fold_performance[i] = test_metrics
 
 # Declare the invalid metrics for not considering them
@@ -171,16 +149,8 @@ mean_AP_str = f'{round(100*scalar_metrics_df["mean_AP"].loc["Mean"], 1)} ± {rou
 
 # Open log file and print
 with open(path_dict['train_log'], 'a') as f:
-    print_both(f'AutoML training log:', f)
-    print_both(log, f)
     print_both('\n', f)
-    print_both(f'AutoML training info:', f)
-    print_both(info, f)
-    print_both('\n', f)
-    print_both(f'Leaderboard of AuntoML (Ensembles excluded):', f)
-    print_both(lb.head(rows=lb.nrows), f)
-    print_both('\n', f)
-    print_both(f'General results of AuntoML (Ensembles excluded):', f)
+    print_both(f'General results:', f)
     print_both(scalar_metrics_df, f)
     print_both('\n', f)
     print_both(f'Final performance = {macc_str}, {tot_acc_str}, {mean_AP_str}', f)
@@ -188,5 +158,3 @@ with open(path_dict['train_log'], 'a') as f:
 # Save the predictions of the best model and the ground truths
 global_test_preds.to_csv(path_dict['predictions'])
 metadata.to_csv(path_dict['groundtruths'])
-
-h2o.cluster().shutdown()
