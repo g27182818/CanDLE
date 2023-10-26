@@ -13,7 +13,7 @@ import shutil
 import pylab
 from rnanorm import TPM
 import matplotlib.patches as mpatches
-from matplotlib.cm import get_cmap, ScalarMappable
+from matplotlib.cm import get_cmap
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -21,12 +21,12 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import TensorDataset, DataLoader
 import anndata as ad
-import scanpy as sc
 import warnings
 from typing import Callable, Tuple
 from qnorm import quantile_normalize
 from combat.pycombat import pycombat
 from utils import *
+from batch_metrics import *
 import matplotlib.pyplot as plt
 
 # Suppress not useful warnings
@@ -57,6 +57,7 @@ class gtex_tcga_dataset():
             gene_list_csv:          str = 'None',
             wang_level:             int = 0,
             batch_normalization:    str = 'None',
+            norm_grouping:          str = 'source',
             fold_number:            int = 5,
             partition_seed:         int = 0,
             force_compute:          bool = False
@@ -77,7 +78,8 @@ class gtex_tcga_dataset():
             sample_frac (float, optional): For a gene to be considered it should be expressed in at least this fraction of the samples in each batch (gtex, tcga). Defaults to 0.5.
             gene_list_csv (str, optional): Path to a gene csv that acts as a wildcard for gene filtering. Defaults to 'None'.
             wang_level (int, optional): Level of wang processing (0: Do not perform any wang processing, 1: Leave only paired samples, 2: Quantile normalization, 3: ComBat). Defaults to 0.
-            batch_normalization (bool, optional): If true, performs z-score normalization in each batch separately. Defaults to True.
+            batch_normalization (str, optional): The amount of z-score normalization in each batch separately. Can be 'None', 'mean', 'std', 'both'. Defaults to None.
+            norm_grouping (str, optional): How to define the groups over which z-score normalization will be done. Can be 'source', 'tissue', 'class', 'source&tissue', 'souce&class'. Defaults to 'source'
             fold_number (int, optional): Number of folds to divide the dataset. Defaults to 5.
             partition_seed (int, optional): Shuffle seed to perform k fold partition. Defaults to 0.
             force_compute (bool, optional): If true, recompute all statistics and re-do all pipeline from scratch. Defaults to False.
@@ -99,11 +101,12 @@ class gtex_tcga_dataset():
         self.gene_list_csv = gene_list_csv
         self.wang_level = wang_level
         self.batch_normalization = batch_normalization
+        self.norm_grouping = norm_grouping
         self.fold_number = fold_number
         self.partition_seed = partition_seed
         self.force_compute = force_compute
 
-        # Main Bioinformatic pipeline
+        ### Main Bioinformatic pipeline
         # Make mapper files if they are not already saved
         self.make_mappers()
         
@@ -168,9 +171,13 @@ class gtex_tcga_dataset():
             command = command.split()
             subprocess.call(command)
 
-    # Filters the dataset by using or not using TCGA and GTEx samples.
     def filter_datasets(self):
+        """
+        Filters the dataset by using or not using TCGA and GTEx samples.
 
+        Returns:
+            _type_: _description_
+        """
         tcga_samples = self.categories.index[self.categories['is_tcga']]
         gtex_samples = self.categories.index[~self.categories['is_tcga']]
 
@@ -193,9 +200,13 @@ class gtex_tcga_dataset():
             
         return matrix_data_filtered, categories_filtered
 
-    # This function extracts the labels from categories and returns a label dataframe and a dictionary of textual labels to numeric labels
     def find_labels(self):
+        """
+        This function extracts the labels from categories and returns a label dataframe and a dictionary of textual labels to numeric labels
 
+        Returns:
+            _type_: _description_
+        """
         # Initialize label df with filtered categories
         label_df = self.categories_filtered
 
@@ -218,8 +229,13 @@ class gtex_tcga_dataset():
         return label_df, lab_txt_2_lab_num
 
     # TODO: Make that general stats is not hosted in self.path but in self.path/processed_data
-    # This function finds the mean expression, std and expressed sample fraction for GTEx, TCGA, healthy TCGA and the joint dataset
     def find_general_stats(self):
+        """
+        This function finds the mean expression, std and expressed sample fraction for GTEx, TCGA, healthy TCGA and the joint dataset
+
+        Returns:
+            _type_: _description_
+        """
         # If the info stats are already computed load them from file
         if (os.path.exists(os.path.join(self.path, 'general_stats.csv'))) & (self.force_compute == False):
             print('Loading general stats from '+os.path.join(self.path, 'general_stats.csv'))
@@ -279,8 +295,13 @@ class gtex_tcga_dataset():
 
         return general_stats
 
-    # This function filters out genes by mean, standard deviation, expression fraction, random fraction or list of genes
     def filter_genes(self):
+        """
+        This function filters out genes by mean, standard deviation, expression fraction, random fraction or list of genes
+
+        Returns:
+            _type_: _description_
+        """
         # If there is a gene list specified by parameter then it overwrites mean, std and rand_frac filtering  
         if self.gene_list_csv != 'None':
             # Print user message
@@ -507,47 +528,48 @@ class gtex_tcga_dataset():
         print(f'Wang processing took {time.time() - start_time:.2f} seconds.')
         
         return data_matrix, category_df
-
-    # This function performs a data normalization by batches (GTEX or TCGA) 
+ 
     def batch_normalize(self):
+        """
+        This function performs a data normalization by grouping
+        """
+        ### Compute all needed columns for any grouping type (Done disregarding normalization)
+        # Get tissue column
+        _, lab_2_group, group_2_tissues = get_grouping_dicts()            
+        self.label_df['tissue'] = self.label_df['lab_txt'].map(lab_2_group).map(group_2_tissues)
+        self.label_df['tissue'].fillna('None', inplace=True)
+        
+        # Get the other columns
+        self.label_df['source'] = self.label_df['is_tcga'].map({True: 'TCGA', False: 'GTEx'})
+        self.label_df['class'] = self.label_df['lab_txt']
+        self.label_df['source&tissue'] = self.label_df['source'] + '&' + self.label_df['tissue']
+        self.label_df['source&class'] = self.label_df['source'] + '&' + self.label_df['class']
+
         if self.batch_normalization=='None':
             print('Did not perform batch normalization...')
             return
         else:
-            print(f'Batch normalizing matrix data with {self.batch_normalization}...')
+            print(f'Batch normalizing matrix data defined by {self.norm_grouping} grouping with {self.batch_normalization}...')
             start = time.time()
-            # Get the identifiers of the samples in each subset
-            gtex_samples = self.label_df[self.label_df['is_tcga']==False].index
-            tcga_samples = self.label_df[self.label_df['is_tcga']==True].index
-            
-            # Get the data matrices of each subset
-            gtex_data = self.gene_filtered_data_matrix[gtex_samples]
-            tcga_data = self.gene_filtered_data_matrix[tcga_samples]
+            normalized_dataframe_list = []
 
-            # Get index and columns of the data matrices
-            gtex_index = gtex_data.index
-            tcga_index = tcga_data.index
-            gtex_columns = gtex_data.columns
-            tcga_columns = tcga_data.columns
-
-            # Define boolean variables to indicate if mean or std normalization is to be performed
-            bool_mean, bool_std = False, False
-            # Handle the cases of mean, std or both
-            if (self.batch_normalization == 'mean') or (self.batch_normalization == 'both'):
-                bool_mean = True
-            if (self.batch_normalization == 'std') or (self.batch_normalization == 'both'):
-                bool_std = True
-            
-            # Apply standardization to each subset
-            normalized_gtex_data = StandardScaler(with_mean=bool_mean, with_std=bool_std).fit_transform(gtex_data.T).T
-            normalized_tcga_data = StandardScaler(with_mean=bool_mean, with_std=bool_std).fit_transform(tcga_data.T).T
-            
-            # Create dataframes from the normalized data
-            normalized_gtex_df = pd.DataFrame(normalized_gtex_data, index=gtex_index, columns=gtex_columns)
-            normalized_tcga_df = pd.DataFrame(normalized_tcga_data, index=tcga_index, columns=tcga_columns)
+            for curr_group in self.label_df[self.norm_grouping].unique():
+                curr_samples = self.label_df[self.label_df[self.norm_grouping]==curr_group].index
+                curr_data = self.gene_filtered_data_matrix[curr_samples]
+                curr_index = curr_data.index
+                curr_columns = curr_data.columns
+                # Define boolean variables to indicate if mean or std normalization is to be performed
+                bool_mean = True if self.batch_normalization in ['mean', 'both'] else False
+                bool_std =  True if self.batch_normalization in ['std', 'both'] else False
+                # Apply standardization
+                normalized_curr_data = StandardScaler(with_mean=bool_mean, with_std=bool_std).fit_transform(curr_data.T).T
+                # Create dataframe from the normalized data
+                normalized_curr_df = pd.DataFrame(normalized_curr_data, index=curr_index, columns=curr_columns)
+                # Append dataframe to list
+                normalized_dataframe_list.append(normalized_curr_df)
 
             # Concatenate the normalized dataframes
-            normalized_joint = pd.concat([normalized_gtex_df, normalized_tcga_df], axis=1)
+            normalized_joint = pd.concat(normalized_dataframe_list, axis=1)
 
             # Sort columns of normalized joint
             normalized_joint = normalized_joint.T.sort_index().T
@@ -555,10 +577,12 @@ class gtex_tcga_dataset():
             # Replace NaNs generated by std division to 0's
             self.gene_filtered_data_matrix = normalized_joint.fillna(0.0)
             end = time.time()
-            print(f'It took {round(end-start, 2)} s to batch normalize the data.')    
+            print(f'It took {round(end-start, 2)} s to batch normalize the data.')
 
-    # This function uses self.binary_dict to modify self.label_df and self.lab_txt_2_lab_num to make the labels binary
     def make_binary_problem(self):
+        """
+        This function uses self.binary_dict to modify self.label_df and self.lab_txt_2_lab_num to make the labels binary
+        """
         # If binary_dict is not specified, do not make binary
         if self.binary_dict == {}:
             print("No binary problem specified.")
@@ -572,8 +596,13 @@ class gtex_tcga_dataset():
             print(f"Number of samples in class 0: {len(self.label_df[self.label_df['lab_num'] == 0])}, number of samples in class 1: {len(self.label_df[self.label_df['lab_num'] == 1])}")
             return
 
-    # Get the indexes of of each fold
     def get_k_fold_indexes(self):
+        """
+        Get the indexes of of each fold
+
+        Returns:
+            _type_: _description_
+        """
         # Get dummy x data and real y values
         dummy_x = np.zeros(len(self.label_df["lab_num"]))
         global_y = np.ravel(self.label_df["lab_num"].values)
@@ -585,9 +614,17 @@ class gtex_tcga_dataset():
             counter = counter + 1
         return k_fold_indexes
 
-    # This function gets the dataloaders for the train, val and test sets
     def get_dataloaders(self, batch_size=100, fold=0):
+        """
+        This function gets the dataloaders for the train, val and test sets
 
+        Args:
+            batch_size (int, optional): _description_. Defaults to 100.
+            fold (int, optional): _description_. Defaults to 0.
+
+        Returns:
+            _type_: _description_
+        """
         # Get train and test indexes depending on the fold number
         train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
         
@@ -613,8 +650,16 @@ class gtex_tcga_dataset():
 
         return train_loader, test_loader
 
-    # This function uses self.label_df to split the data into train and test sets depending on the fold number
     def get_numpy_split(self, fold=0):
+        """
+        This function uses self.label_df to split the data into train and test sets depending on the fold number
+
+        Args:
+            fold (int, optional): _description_. Defaults to 0.
+
+        Returns:
+            _type_: _description_
+        """
         # Get train and test indexes depending on the fold number
         train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
         # Get train and test matrices and groundtruth
@@ -625,8 +670,16 @@ class gtex_tcga_dataset():
         # Return split dictionary
         return split_dict
 
-    # This is just as get_numpy_split but it returns the annotations of the batch (0: gtex, 1: tcga)
     def get_batch_split(self, fold=0):
+        """
+        This is just as get_numpy_split but it returns the annotations of the batch (0: gtex, 1: tcga)
+
+        Args:
+            fold (int, optional): _description_. Defaults to 0.
+
+        Returns:
+            _type_: _description_
+        """
         # Get train and test indexes depending on the fold number
         train_index, test_index = self.k_fold_indexes[fold]['train_index'], self.k_fold_indexes[fold]['test_index']
         # Get train and test matrices and groundtruth
@@ -637,10 +690,15 @@ class gtex_tcga_dataset():
         # Return split dictionary
         return split_dict        
 
-    # This function augments the self.label_df dataframe with textual and numeric hong annotations.
-    # The function returns a dictionary that goes from standard numeric annotations to hong tuple annotations
-    # and other dictionary that goes from hong tuple annotations (numeric) to standard int annotations. 
     def compute_hong_annotations(self):
+        """
+        This function augments the self.label_df dataframe with textual and numeric hong annotations.
+        The function returns a dictionary that goes from standard numeric annotations to hong tuple annotations
+        and other dictionary that goes from hong tuple annotations (numeric) to standard int annotations. 
+
+        Returns:
+            _type_: _description_
+        """
         # Read lab_txt_2_tissue mapper
         with open(os.path.join(self.path, "mappers", "id_2_tissue_mapper.json"), "r") as f:
             lab_txt_2_tissue = json.load(f)
@@ -775,8 +833,10 @@ class gtex_tcga_dataset():
                         'test_standard_gt': self.label_df['lab_num'].values[test_index]}    
         return return_dict
 
-    # This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
-    def plot_filtering_histograms(self, filtering_info_df):        
+    def plot_filtering_histograms(self, filtering_info_df):
+        """
+        This function plots a 2X2 figure with the histograms of mean expression and standard deviation before and after filtering
+        """        
         # Make a figure
         fig, axes = plt.subplots(2, 2, figsize = (18, 12))
         fig.suptitle("Filtering of Mean > " +str(self.mean_thr) + " and Standard Deviation > " + str(self.std_thr) , fontsize = 30)
@@ -1373,16 +1433,16 @@ def read_recount3(path, force_compute):
 
 # Specific dataset declaration
 class ToilDataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_toil, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, fold_number, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_toil, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', norm_grouping='source', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, norm_grouping, fold_number, partition_seed, force_compute)
 
 class WangDataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_wang, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, fold_number, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_wang, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', norm_grouping='source', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, norm_grouping, fold_number, partition_seed, force_compute)
 
 class Recount3Dataset(gtex_tcga_dataset):
-    def __init__(self, path, read_func=read_recount3, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', fold_number=5, partition_seed=0, force_compute=False):
-        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, fold_number, partition_seed, force_compute)
+    def __init__(self, path, read_func=read_recount3, dataset='both', tissue='all', binary_dict={}, mean_thr=-10, std_thr=0.01, rand_frac=1, sample_frac=0.5, gene_list_csv='None', wang_level=0, batch_normalization='None', norm_grouping='source', fold_number=5, partition_seed=0, force_compute=False):
+        super().__init__(path, read_func, dataset, tissue, binary_dict, mean_thr, std_thr, rand_frac, sample_frac, gene_list_csv, wang_level, batch_normalization, norm_grouping, fold_number, partition_seed, force_compute)
 
 # Test code for dataset declaration
 

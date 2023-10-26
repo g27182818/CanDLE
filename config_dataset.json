@@ -1,5 +1,5 @@
 {
-    "source": "recount3",
+    "source": "wang",
     "dataset": "both",
     "tissue": "all", 
     "all_vs_one": "False",
@@ -10,6 +10,7 @@
     "gene_list_csv": "None",
     "wang_level": 3,     
     "batch_norm": "both", 
+    "norm_grouping": "source&class",
     "fold_number": 5,     
     "seed": 0     
 }

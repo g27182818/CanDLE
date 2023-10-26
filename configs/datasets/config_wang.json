@@ -9,7 +9,8 @@
     "sample_frac": 0.99,   
     "gene_list_csv": "None",
     "wang_level": 0,     
-    "batch_norm": "None", 
+    "batch_norm": "None",
+    "norm_grouping": "source",
     "fold_number": 5,     
     "seed": 0     
 }

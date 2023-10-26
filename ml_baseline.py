@@ -81,7 +81,7 @@ fold_performance = {}
 # Iterate over folds
 for i in range(args.fold_number):
     
-    # Define the type of metod to use. Use default sklearn parameters for Decision Tree Classifier (dt),
+    # Define the type of method to use. Use default sklearn parameters for Decision Tree Classifier (dt),
     # Random Forest Classifier (rf), Extra Trees Classifier (et), Support Vector Machine (svm), Stochastic Gradient Descent (sgd),
     # K-Nearest Neighbors (knn).
 

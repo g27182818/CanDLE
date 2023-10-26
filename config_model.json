@@ -1,4 +1,4 @@
 {
-    "sota": "automl",    
+    "sota": "rf",    
     "weights": true  
 }

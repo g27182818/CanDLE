@@ -12,47 +12,57 @@ import time
 # TODO: Fix this warning
 warnings.filterwarnings("ignore", message="The 'nopython' keyword argument was not supplied to the 'numba.jit' decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.")
 
-# Define mapping between classes and groups
-group_2_lab = {
-    1:  ['GTEX-PRO', 'TCGA-PRAD'],
-    2:  ['GTEX-BLA', 'TCGA-BLCA'],
-    3:  ['GTEX-BRE', 'TCGA-BRCA'],
-    4:  ['GTEX-THY', 'TCGA-THCA'],
-    5:  ['GTEX-STO', 'TCGA-STAD'],
-    6:  ['GTEX-LUN', 'TCGA-LUAD', 'TCGA-LUSC'],
-    7:  ['GTEX-LIV', 'TCGA-LIHC', 'TCGA-CHOL'],
-    8:  ['GTEX-KID', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-KICH'],
-    9:  ['GTEX-COL', 'TCGA-COAD', 'TCGA-READ'],
-    10: ['GTEX-ESO', 'TCGA-ESCA'],
-    11: ['GTEX-UTE', 'GTEX-CER', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-CESC'],
-    12: ['GTEX-SAL_GLA', 'TCGA-HNSC']
-}
+def get_grouping_dicts()-> tuple[dict, dict, dict]:
+    """
+    This function generates back and forth mappers from txt labels to tissue specific groupings. 
 
-# Get group tissues in text format
-group_2_tissues = {
-    1:  'Prostate',
-    2:  'Bladder',
-    3:  'Breast',
-    4:  'Thyroid',
-    5:  'Stomach',
-    6:  'Lung',
-    7:  'Liver',
-    8:  'Kidney',
-    9:  'Colon',
-    10: 'Esophagus',
-    11: 'Uterus',
-    12: 'Head and Neck'
-}
+    Returns:
+        tuple[dict, dict, dict]: Three mappers:
+                                    group_2_lab:        keys: Group number in int format, values: Lists of txt_labels corresponding to each group
+                                    lab_2_group:        keys: txt_labels in string, values: Group number in int format 
+                                    group_2_tissues:    keys: Group number in int format, values: Group tissue names.
+    """
+    # Define mapping between classes and groups
+    group_2_lab = {
+        1:  ['GTEX-PRO', 'TCGA-PRAD'],
+        2:  ['GTEX-BLA', 'TCGA-BLCA'],
+        3:  ['GTEX-BRE', 'TCGA-BRCA'],
+        4:  ['GTEX-THY', 'TCGA-THCA'],
+        5:  ['GTEX-STO', 'TCGA-STAD'],
+        6:  ['GTEX-LUN', 'TCGA-LUAD', 'TCGA-LUSC'],
+        7:  ['GTEX-LIV', 'TCGA-LIHC', 'TCGA-CHOL'],
+        8:  ['GTEX-KID', 'TCGA-KIRC', 'TCGA-KIRP', 'TCGA-KICH'],
+        9:  ['GTEX-COL', 'TCGA-COAD', 'TCGA-READ'],
+        10: ['GTEX-ESO', 'TCGA-ESCA'],
+        11: ['GTEX-UTE', 'GTEX-CER', 'TCGA-UCEC', 'TCGA-UCS', 'TCGA-CESC'],
+        12: ['GTEX-SAL_GLA', 'TCGA-HNSC']
+    }
 
-# Reverse dictionary
-lab_2_group = {}
-for group in group_2_lab:
-    for lab in group_2_lab[group]:
-        lab_2_group[lab] = group
+    # Get group tissues in text format
+    group_2_tissues = {
+        1:  'Prostate',
+        2:  'Bladder',
+        3:  'Breast',
+        4:  'Thyroid',
+        5:  'Stomach',
+        6:  'Lung',
+        7:  'Liver',
+        8:  'Kidney',
+        9:  'Colon',
+        10: 'Esophagus',
+        11: 'Uterus',
+        12: 'Head and Neck'
+    }
 
+    # Reverse dictionary
+    lab_2_group = {}
+    for group in group_2_lab:
+        for lab in group_2_lab[group]:
+            lab_2_group[lab] = group
+    
+    return group_2_lab, lab_2_group, group_2_tissues
 
-
-# FIXME: Varnames are not included yet
+# FIXME: Var_names are not included yet
 def get_adata_from_dataset(dataset):
     """
     Get anndata object from dataset. This function also ensures that the samples in the adata object are
@@ -72,8 +82,10 @@ def get_adata_from_dataset(dataset):
     # Assure the indexes are in the same order
     X.sort_index(inplace=True)
     obs.sort_index(inplace=True)
-
     adata = ad.AnnData(X=X, obs=obs)
+
+    # Get mappers from label to group
+    group_2_lab, lab_2_group, group_2_tissues = get_grouping_dicts
 
     ### In case the dataset has not been sample filtered yet (processing level 0), we do it here
     # Get binary mask of samples with label in lab_2_group keys
@@ -114,7 +126,6 @@ def process_adata(adata: ad.AnnData) -> ad.AnnData:
     print(f'Done in {time.time() - start:.2f} seconds')
     
     return adata
-
 
 def get_biological_conservation_metrics(adata: ad.AnnData, unprocessed_adata: ad.AnnData) -> dict:
     """

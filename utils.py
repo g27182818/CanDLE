@@ -41,6 +41,7 @@ def get_general_parser():
     parser.add_argument('--gene_list_csv',          type=str,       default='None',         help="Path to csv file with a subset of genes to train CanDLE. The gene list overwrites all other gene filterings. Example: Rankings/100_candle_thresholds/at_least_3_cancer_types.csv")
     parser.add_argument('--wang_level',             type=int,       default=0,              help="Level of wang processing (0: Do not perform any wang processing, 1: Leave only paired samples, 2: Quantile normalization, 3: ComBat)",                                                            choices=[0, 1, 2, 3])
     parser.add_argument('--batch_norm',             type=str,       default='None',         help="The amount of z-score normalization in each batch separately. Can be 'None', 'mean', 'std', 'both'",                                                                                              choices=['None', 'mean', 'std', 'both'])
+    parser.add_argument('--norm_grouping',          type=str,       default='Source',       help="How to define the groups over which z-score normalization will be done",                                                                                                                          choices=['source', 'tissue', 'class', 'source&tissue', 'source&class'])
     parser.add_argument('--fold_number',            type=int,       default=5,              help="The number of folds to use in stratified k-fold cross-validation. Minimum 2. In general more than 5 can cause errors.")
     parser.add_argument('--seed',                   type=int,       default=0,              help="Partition seed to divide tha data. Default is 0.")
 
@@ -432,8 +433,9 @@ def get_dataset_from_args(args):
                                 mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                                 rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                                 gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                                batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                                partition_seed = args.seed,                 force_compute = False)
+                                batch_normalization=args.batch_norm,        norm_grouping=args.norm_grouping,
+                                fold_number = args.fold_number,             partition_seed = args.seed,
+                                force_compute = False)
 
     elif args.source == 'wang':
         dataset = WangDataset(  os.path.join('data', 'wang_data'),          dataset = args.dataset,
@@ -441,8 +443,9 @@ def get_dataset_from_args(args):
                                 mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                                 rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                                 gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                                batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                                partition_seed = args.seed,                 force_compute = False)
+                                batch_normalization=args.batch_norm,        norm_grouping=args.norm_grouping,
+                                fold_number = args.fold_number,             partition_seed = args.seed,
+                                force_compute = False)
 
     elif args.source == 'recount3':
         dataset = Recount3Dataset(os.path.join('data', 'recount3_data'),    dataset = args.dataset,
@@ -450,8 +453,9 @@ def get_dataset_from_args(args):
                                 mean_thr = args.mean_thr,                   std_thr = args.std_thr,
                                 rand_frac = args.rand_frac,                 sample_frac=args.sample_frac,
                                 gene_list_csv = args.gene_list_csv,         wang_level=args.wang_level,
-                                batch_normalization=args.batch_norm,        fold_number = args.fold_number,
-                                partition_seed = args.seed,                 force_compute = False)
+                                batch_normalization=args.batch_norm,        norm_grouping=args.norm_grouping,
+                                fold_number = args.fold_number,             partition_seed = args.seed,
+                                force_compute = False)
     else:
         raise ValueError('Invalid source argument. Valid arguments are: toil, wang, recount3')
     
