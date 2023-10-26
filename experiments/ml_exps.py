@@ -3,9 +3,9 @@ import subprocess
 import os
 
 """
-This code runs experiments to check the bias, batch correction performance and biological signal performance of various versions of the processed datasets.
-The expreiments are run for all the datasets (wang, toil and recount3) and all the processing levels (0, 1, 2, 3, 4, 5, 6). The description of the processing
-is as follows:
+This code runs experiments to obtain classic ml baselines in all datasets (wang, toil and recount3) and all the processing levels (0, 1, 2, 3, 4, 5, 6).
+Visualizations are stored in the figures folder.
+The description of the processing is as follows:
 
 Level 0: No processing. The data is just filtered for genes and samples with enough counts.
 Level 1: Samples from categories of the GTEx of TCGA that do not have sufficient paired samples in the other dataset are removed.

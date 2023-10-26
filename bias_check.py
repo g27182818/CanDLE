@@ -93,8 +93,6 @@ if args.integration_metrics in ['svm', 'both']:
 
 
 
-
-
 # This is the old code with various valuable plots
 # ######################################################################
 # #            You can safely change these parameters                  #

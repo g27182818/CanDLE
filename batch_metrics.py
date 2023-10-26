@@ -52,6 +52,7 @@ for group in group_2_lab:
 
 
 
+# FIXME: Varnames are not included yet
 def get_adata_from_dataset(dataset):
     """
     Get anndata object from dataset. This function also ensures that the samples in the adata object are
