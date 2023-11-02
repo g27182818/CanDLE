@@ -155,6 +155,8 @@ pip install combat
 pip install thundersvm
 pip install scib
 pip install pynndescent
+pip install optuna
+pip install optuna-dashboard
 ```
 
 **Note:**

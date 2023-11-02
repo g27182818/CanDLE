@@ -15,6 +15,7 @@
         "LUAD",
         "LUSC",
         "mydata",
+        "optuna",
         "PRAD",
         "pycombat",
         "qnorm",

@@ -26,6 +26,8 @@ if config_params['sota']=='None':
     command_list = ['python', 'main.py']
 elif config_params['sota']=='bias':
     command_list = ['python', 'bias_check.py']
+elif config_params['sota']=='rf_auto_ml':
+    command_list = ['python', 'rf_auto_ml.py']
 else:
     command_list = ['python', 'ml_baseline.py']
 
